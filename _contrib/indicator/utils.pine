@@ -1,0 +1,119 @@
+//@version=6
+indicator(title = 'Trader7 Main', shorttitle='T7_MAIN', overlay=true, max_bars_back=300,max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+import TradersReality/Traders_Reality_Lib/2 as trLib
+
+f_security(_symbol, _res, _src, _repaint) =>
+    request.security(_symbol, _res, _src[_repaint ? 0 : barstate.isrealtime ? 1 : 0])[_repaint ? 0 : barstate.isrealtime ? 0 : 1]
+
+// Function to draw dashed lines for W and M formations
+f_draw_dashed_line(start_index, end_index, level, line_color) =>
+    line.new(x1=start_index, y1=level, x2=end_index, y2=level, color=line_color, width=1, style=line.style_dashed)
+
+// Function to draw transparent overlays for W and M formations
+f_draw_overlay(start_index, end_index, top_level, bottom_level, overlay_color) =>
+    box.new(left=start_index,top=top_level,right=end_index,bottom=bottom_level,border_color=color.new(overlay_color, 0),bgcolor=color.new(overlay_color, 80))
+
+// Detect W Formation
+f_is_w_formation(_high, _low, _close) =>
+    _low[2] > _low[1] and _low[1] < _low and _high[1] > _high[2] and _high > _high[1] and _close > _close[1]
+
+is_w_formation = f_is_w_formation(high, low, close)
+
+// Add Labels for W Formation
+if is_w_formation
+    label.new(x = bar_index, y = na, text = "W Formation", color = color.new(color.green, 90), textcolor = color.white, style = label.style_label_down, yloc = yloc.belowbar, size = size.normal)
+    f_draw_dashed_line(bar_index[2], bar_index, low, color.new(color.green, 0))
+    f_draw_overlay(bar_index[2], bar_index, high[2], low[2], color.new(color.green, 80))
+
+// Function to detect M Formation
+
+// Detect M Formation
+f_is_m_formation(_high, _low, _close) =>
+    _high[2] < _high[1] and _high[1] > _high and _low[1] < _low[2] and _low < _low[1] and _close < _close[1]
+
+is_m_formation = f_is_m_formation(high, low, close)
+
+// Add Labels for M Formation
+if is_m_formation
+    label.new(x = bar_index, y = na, text = "M Formation", color = color.new(color.red, 90), textcolor = color.white, style = label.style_label_up, yloc = yloc.abovebar, size = size.normal)
+    f_draw_dashed_line(bar_index[2], bar_index, high, color.new(color.red, 0))
+    f_draw_overlay(bar_index[2], bar_index, high[2], low[2], color.new(color.red, 80))
+
+// Function to check for significant moves
+f_is_significant_move(_high, _low, _atr) =>
+    (_high - _low) > _atr
+
+// Function to check for high volume
+f_is_high_volume(_volume, _avg_volume) =>
+    _volume > _avg_volume * 2
+
+// Function to detect Tattoo Pattern
+f_is_tattoo_pattern(_high, _low, _close) =>
+    _low[2] > _low[1] and _low[1] < _low and _high[1] > _high[2] and _high > _high[1] and _close > _close[1] and _close[1] < _close[2]
+
+is_tattoo_pattern = f_is_tattoo_pattern(high, low, close)
+
+// Add Labels for Tattoo Pattern
+if is_tattoo_pattern
+    label.new(x = bar_index, y = na, text = "Tattoo Pattern", color = color.new(color.blue, 90), textcolor = color.white, style = label.style_label_down, yloc = yloc.belowbar, size = size.normal)
+
+// Function to detect Vector Candles
+f_is_vector_candle(_volume, _avg_volume, _close, _open) =>
+    _volume > _avg_volume * 2 and _close > _open
+
+// Calculate average volume
+avg_volume = ta.sma(volume, 14)
+
+// Function to add labels for key levels
+f_add_label(index, price, label_text, label_color) =>
+    label.new(x=index, y=price, text=label_text, style=label.style_label_down, color=color.new(label_color, 70), textcolor=color.white)
+
+// Function to detect Weekly Cycle
+// Weekly Cycle Logic
+f_detect_weekly_cycle(_high, _low, _close, _volume, _avg_volume, _current_level) =>
+    new_level = _current_level
+    is_w_formation = _low[2] > _low[1] and _low[1] < _low and _high[1] > _high[2] and _high > _high[1] and _close > _close[1]
+    is_m_formation = _high[2] < _high[1] and _high[1] > _high and _low[1] < _low[2] and _low < _low[1] and _close < _close[1]
+
+    // Vector candle detection
+    is_green_vector = _volume > _avg_volume * 2 and _close > open
+    is_red_vector = _volume > _avg_volume * 2 and _close < open
+
+    if is_w_formation and na(new_level)
+        new_level := 1  // Start of the cycle (Level 1)
+        f_add_label(bar_index, low, "W - Level 1", color.green)
+    else if new_level == 1 and is_green_vector
+        new_level := 2  // Level 2
+        f_add_label(bar_index, high, "Level 2", color.green)
+    else if new_level == 2 and is_green_vector
+        new_level := 3  // Level 3
+        f_add_label(bar_index, high, "Level 3", color.green)
+    else if new_level == 3 and is_m_formation
+        new_level := 4  // Peak Formation
+        f_add_label(bar_index, high, "M - Peak Formation", color.red)
+    else if new_level == 4 and is_red_vector
+        new_level := -3  // Reversing to Level 3
+        f_add_label(bar_index, low, "Reverse Level 3", color.red)
+    else if new_level == -3 and is_red_vector
+        new_level := -2  // Reversing to Level 2
+        f_add_label(bar_index, low, "Reverse Level 2", color.red)
+    else if new_level == -2 and is_red_vector
+        new_level := -1  // Reversing to Level 1
+        f_add_label(bar_index, low, "Reverse Level 1", color.red)
+    else if new_level == -1
+        new_level := na  // End of the cycle
+
+    new_level
+
+//is_weekly_cycle = f_is_weekly_cycle(high, low, close, volume, avg_volume)
+
+// Detect and highlight weekly cycle
+var int current_level = na
+current_level := f_detect_weekly_cycle(high, low, close, volume, avg_volume, current_level)
+
+// Alert Conditions
+alertcondition(is_w_formation, title="W Formation Detected", message="A W formation has been detected on the chart.")
+alertcondition(is_m_formation, title="M Formation Detected", message="An M formation has been detected on the chart.")
+alertcondition(is_tattoo_pattern, title="Tattoo Pattern Detected", message="A Tattoo pattern has been detected on the chart.")
+// alertcondition(is_weekly_cycle, title="Weekly Cycle Detected", message="A Weekly cycle has been detected on the chart.")

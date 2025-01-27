@@ -1,0 +1,61 @@
+// market_sessions.pine
+
+// Market Sessions
+[nyDST, ukDST, sydDST] = trLib.calcDst()
+
+if ukDST
+    trLib.drawOpenRange(sess1Time,sess1col,showOr1,'GMT+1')
+    trLib.drawSessionHiLo(sess1Time, showRectangle1, showLabel1, sess1colLabel, sess1Label, 'GMT+1', rectStyle)
+else
+    trLib.drawOpenRange(sess1Time,sess1col,showOr1,'GMT+0')
+    trLib.drawSessionHiLo(sess1Time, showRectangle1, showLabel1, sess1colLabel, sess1Label, 'GMT+0', rectStyle)
+
+if nyDST
+    trLib.drawOpenRange(sess2Time,sess2col,showOr2,'GMT+1')
+    trLib.drawSessionHiLo(sess2Time, showRectangle2, showLabel2, sess2colLabel, sess2Label, 'GMT+1', rectStyle)
+else
+    trLib.drawOpenRange(sess2Time,sess2col,showOr2,'GMT+0')
+    trLib.drawSessionHiLo(sess2Time, showRectangle2, showLabel2, sess2colLabel, sess2Label, 'GMT+0', rectStyle)
+
+// Tokyo
+trLib.drawOpenRange(sess3Time,sess3col,showOr3,'GMT+0')
+trLib.drawSessionHiLo(sess3Time, showRectangle3, showLabel3, sess3colLabel, sess3Label, 'GMT+0', rectStyle)
+
+// Hong Kong
+trLib.drawOpenRange(sess4Time,sess4col,showOr4,'GMT+0')
+trLib.drawSessionHiLo(sess4Time, showRectangle4, showLabel4, sess4colLabel, sess4Label, 'GMT+0', rectStyle)
+
+if sydDST
+    trLib.drawOpenRange(sess5Time,sess5col,showOr5,'GMT+1')
+    trLib.drawSessionHiLo(sess5Time, showRectangle5, showLabel5, sess5colLabel, sess5Label, 'GMT+1', rectStyle)
+else
+    trLib.drawOpenRange(sess5Time,sess5col,showOr5,'GMT+0')
+    trLib.drawSessionHiLo(sess5Time, showRectangle5, showLabel5, sess5colLabel, sess5Label, 'GMT+0', rectStyle)
+
+// EU Brinks
+if ukDST
+    trLib.drawOpenRange(sess6Time,sess6col,showOr6,'GMT+1')
+    trLib.drawSessionHiLo(sess6Time, showRectangle6, showLabel6, sess6colLabel, sess6Label, 'GMT+1', rectStyle)
+else
+    trLib.drawOpenRange(sess6Time,sess6col,showOr6,'GMT+0')
+    trLib.drawSessionHiLo(sess6Time, showRectangle6, showLabel6, sess6colLabel, sess6Label, 'GMT+0', rectStyle)
+
+// US Brinks
+if nyDST
+    trLib.drawOpenRange(sess7Time,sess7col,showOr7,'GMT+1')
+    trLib.drawSessionHiLo(sess7Time, showRectangle7, showLabel7, sess7colLabel, sess7Label, 'GMT+1', rectStyle)
+else
+    trLib.drawOpenRange(sess7Time,sess7col,showOr7,'GMT+0')
+    trLib.drawSessionHiLo(sess7Time, showRectangle7, showLabel7, sess7colLabel, sess7Label, 'GMT+0', rectStyle)
+
+// Frankfurt
+if ukDST
+    trLib.drawOpenRange(sess8Time,sess8col,showOr8,'GMT+1')
+    trLib.drawSessionHiLo(sess8Time, showRectangle8, showLabel8, sess8colLabel, sess8Label, 'GMT+1', rectStyle)
+else
+    trLib.drawOpenRange(sess8Time,sess8col,showOr8,'GMT+0')
+    trLib.drawSessionHiLo(sess8Time, showRectangle8, showLabel8, sess8colLabel, sess8Label, 'GMT+0', rectStyle)
+
+// Detect W Formation During London Session
+is_london_session = time(timeframe.period, "0800-1630")
+// is_w_formation_london = f_is_w_formation(high, low) and not na(is_london_session)

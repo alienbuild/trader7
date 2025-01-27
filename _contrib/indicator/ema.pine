@@ -1,0 +1,61 @@
+// ema.pine
+
+// EMAs
+oneEmaLength = 5
+twoEmaLength = 13
+threeEmaLength = 50
+fourEmaLength = 200
+fiveEmaLength = 800
+
+oneEma = ta.ema(close, oneEmaLength)
+plot(showEmas ? oneEma : na, color=oneEmaColor, title='5 Ema')
+
+twoEma = ta.ema(close, twoEmaLength)
+plot(showEmas ? twoEma : na, color=twoEmaColor, title='13 Ema')
+
+threeEma = ta.ema(close, threeEmaLength)
+plot(showEmas ? threeEma : na, color=threeEmaColor, title='50 Ema')
+
+fourEma = ta.ema(close, fourEmaLength)
+plot(showEmas ? fourEma : na, color=fourEmaColor, title='200 Ema')
+
+fiveEma = ta.ema(close, fiveEmaLength)
+plot(showEmas ? fiveEma : na, color=fiveEmaColor, linewidth=2, title='800 Ema')
+
+// Ema 50 cloud placed here for readability on data window
+cloudSize = ta.stdev(close, threeEmaLength * 2) / 4
+p1 = plot(showEmas ? threeEma + cloudSize : na, 'Upper 50 Ema Cloud', color=emaCloudBorderColor, offset=0)
+p2 = plot(showEmas ? threeEma - cloudSize : na, 'Lower 50 Ema Cloud', color=emaCloudBorderColor, offset=0)
+fill(p1, p2, title='EMA 50 Cloud', color=emaCloudColor)
+
+// Label EMAs
+trLib.rLabel(oneEma, '5 Ema', label.style_none, oneEmaColor, labelEmas, labelXOffset)
+trLib.rLabel(twoEma, '13 Ema', label.style_none, twoEmaColor, labelEmas, labelXOffset)
+trLib.rLabel(threeEma, '50 Ema', label.style_none, threeEmaColor, labelEmas, labelXOffset)
+trLib.rLabel(fourEma, '200 Ema', label.style_none, fourEmaColor, labelEmas, labelXOffset)
+trLib.rLabel(fiveEma, '800 Ema', label.style_none, fiveEmaColor, labelEmas, labelXOffset)
+
+// Detect Moving Average Contraction
+ema_50 = ta.ema(close, 50)
+ema_200 = ta.ema(close, 200)
+ema_800 = ta.ema(close, 800)
+is_contraction = math.abs(ema_50 - ema_200) < ta.stdev(close, 14)
+
+// Detect Green Candle Crossing 50 EMA
+is_green_candle = close > open
+is_red_candle = close < open
+
+// Detect Crossovers
+is_cross_above_ema_50 = ta.crossover(close, ema_50)
+is_long_setup = is_green_candle and is_cross_above_ema_50
+
+is_cross_below_ema_50 = ta.crossunder(close, ema_50)
+is_short_setup = is_red_candle and is_cross_below_ema_50
+
+// Add Labels for Green Candle Crossing Above 50 EMA
+if is_green_candle and is_cross_above_ema_50
+    label.new(x = bar_index, y = na, text = "Green Candle Cross Above 50 EMA", color = color.new(color.green, 90), textcolor = color.white, style = label.style_label_down, yloc = yloc.belowbar, size = size.normal)
+
+// Add Labels for Red Candle Crossing Below 50 EMA
+if is_red_candle and is_cross_below_ema_50
+    label.new(x = bar_index, y = na, text = "Red Candle Cross Below 50 EMA", color = color.new(color.red, 90), textcolor = color.white, style = label.style_label_up, yloc = yloc.abovebar, size = size.normal)

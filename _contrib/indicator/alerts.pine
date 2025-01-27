@@ -1,0 +1,68 @@
+// === Inputs ===
+webhookURL = input.string("https://your-api-endpoint.com/webhook", title="Webhook URL")
+
+// === Volume Spike ===
+is_volume_spike = volume > avg_volume * 2
+
+// === RSI Filter ===
+rsi_value = ta.rsi(close, 14)
+is_rsi_filtered_long = rsi_value < 70  // Not overbought
+is_rsi_filtered_short = rsi_value > 30 // Not oversold
+
+// === EMA Fan-Out Confirmation ===
+is_ema_fanned_out = ema_50 > ema_200 and ema_200 > ema_800
+
+// === First Green Vector Candle Above 50 EMA (Long Entry) ===
+is_long_entry = is_green_vector and is_cross_above_ema_50 and is_volume_spike and is_rsi_filtered_long and is_ema_fanned_out
+
+long_payload ='{"symbol": "' + syminfo.ticker + '", ' + '"timestamp": "' + str.tostring(time) + '", ' + '"price": ' + str.tostring(close) + ', ' + '"direction": "long", ' + '"strategy": "First Green Vector Above 50 EMA", ' + '"timeframe": "' + timeframe.period + '", ' + '"ema_50": ' + str.tostring(ema_50) + ', ' + '"ema_200": ' + str.tostring(ema_200) + ', ' + '"ema_800": ' + str.tostring(ema_800) + ', ' + '"volume": ' + str.tostring(volume) + ', ' + '"rsi": ' + str.tostring(rsi_value) + '}'
+
+if is_long_entry
+    alert(long_payload, alert.freq_once_per_bar)
+
+// === First Red Vector Candle Below 50 EMA (Short Entry) ===
+is_short_entry = is_red_vector and is_cross_below_ema_50 and is_volume_spike and is_rsi_filtered_short and is_ema_fanned_out
+
+short_payload = '{"symbol": "' + syminfo.ticker + '", ' + '"timestamp": "' + str.tostring(time) + '", ' + '"price": ' + str.tostring(close) + ', ' + '"direction": "short", ' + '"strategy": "First Red Vector Below 50 EMA", ' + '"timeframe": "' + timeframe.period + '", ' + '"ema_50": ' + str.tostring(ema_50) + ', ' + '"ema_200": ' + str.tostring(ema_200) + ', ' + '"ema_800": ' + str.tostring(ema_800) + ', ' + '"volume": ' + str.tostring(volume) + ', ' + '"rsi": ' + str.tostring(rsi_value) + '}'
+
+if is_short_entry
+    alert(short_payload, alert.freq_once_per_bar)
+
+// === W Formation Confirmation (Long Entry) ===
+
+// Check if green vector candles have been recovered
+is_green_vector_recovered = false
+for i = 1 to 50
+    if high[i] > high[i+1] and close[i] > open[i] and volume[i] > ta.sma(volume, 14)[i] * 2
+        is_green_vector_recovered := true
+        break
+
+is_w_confirmation = is_w_formation and is_green_vector_recovered and close > high[1] and is_volume_spike and is_rsi_filtered_long and is_ema_fanned_out
+
+// Calculate W Formation Size
+w_formation_height = high[1] - low[1]  // Height of the W formation
+w_estimated_move = w_formation_height * 1.5  // Estimated move (1.5x the height)
+
+w_payload = '{"symbol": "' + syminfo.ticker + '", ' + '"timestamp": "' + str.tostring(time) + '", ' + '"price": ' + str.tostring(close) + ', ' + '"direction": "long", ' + '"strategy": "W Formation Confirmation", ' + '"timeframe": "' + timeframe.period + '", ' + '"w_formation_height": ' + str.tostring(w_formation_height) + ', ' + '"w_estimated_move": ' + str.tostring(w_estimated_move) + ', ' + '"ema_50": ' + str.tostring(ema_50) + ', ' + '"ema_200": ' + str.tostring(ema_200) + ', ' + '"ema_800": ' + str.tostring(ema_800) + ', ' + '"volume": ' + str.tostring(volume) + ', ' + '"rsi": ' + str.tostring(rsi_value) + '}'
+
+if is_w_confirmation
+    alert(w_payload, alert.freq_once_per_bar)
+
+// === M Formation Confirmation (Short Entry) ===
+// Check if red vector candles have been recovered
+is_red_vector_recovered = false
+for i = 1 to 50
+    if low[i] < low[i+1] and close[i] < open[i] and volume[i] > ta.sma(volume, 14)[i] * 2
+        is_red_vector_recovered := true
+        break
+
+is_m_confirmation = is_m_formation and is_red_vector_recovered and close < low[1] and is_volume_spike and is_rsi_filtered_short and is_ema_fanned_out
+
+// Calculate M Formation Size
+m_formation_height = high[1] - low[1]  // Height of the M formation
+m_estimated_move = m_formation_height * 1.5  // Estimated move (1.5x the height)
+
+m_payload = '{"symbol": "' + syminfo.ticker + '", ' + '"timestamp": "' + str.tostring(time) + '", ' + '"price": ' + str.tostring(close) + ', ' + '"direction": "short", ' + '"strategy": "M Formation Confirmation", ' + '"timeframe": "' + timeframe.period + '", ' + '"m_formation_height": ' + str.tostring(m_formation_height) + ', ' + '"m_estimated_move": ' + str.tostring(m_estimated_move) + ', ' + '"ema_50": ' + str.tostring(ema_50) + ', ' + '"ema_200": ' + str.tostring(ema_200) + ', ' + '"ema_800": ' + str.tostring(ema_800) + ', ' + '"volume": ' + str.tostring(volume) + ', ' + '"rsi": ' + str.tostring(rsi_value) + '}'
+
+if is_m_confirmation
+    alert(m_payload, alert.freq_once_per_bar)

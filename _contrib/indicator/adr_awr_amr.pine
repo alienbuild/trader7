@@ -1,0 +1,80 @@
+// adr_awr_amr.pine
+
+// ADR
+[dayAdr, dayAdrHigh, dayAdrLow]  = request.security(syminfo.tickerid, 'D', trLib.adrHiLo(aDRRange,1, showADRDO), lookahead=barmerge.lookahead_on)
+dayAdrHigh50 = dayAdrHigh - (dayAdr/2)
+dayAdrLow50 = dayAdrLow + (dayAdr/2)
+
+if showADR
+    string hl = 'Hi-ADR'+ (showADRDO?'(DO)':'')
+    string ll = 'Lo-ADR'+ (showADRDO?'(DO)':'')
+    trLib.drawLine(dayAdrHigh, 'D', hl, adrColor, adrStyle, 2, extend.right, showADRLabels and validTimeFrame, adrLabelXOffset, validTimeFrame)
+    trLib.drawLine(dayAdrLow, 'D', ll, adrColor, adrStyle, 2, extend.right, showADRLabels and validTimeFrame, adrLabelXOffset, validTimeFrame)
+    trLib.rLabelOffset((dayAdrHigh + dayAdrLow) / 2, 'ADR ' + str.format('{0,number,#.##}', trLib.toPips(dayAdr)) + 'PIPS|' + str.tostring(dayAdr, format.mintick) + syminfo.currency, label.style_none, adrColor, showADRLabels and validTimeFrame and showADRRange, adrLabelXOffset)
+
+if showADR and showADR50
+    string hl = '50% Hi-ADR'+ (showADRDO?'(DO)':'')
+    string ll = '50% Lo-ADR'+ (showADRDO?'(DO)':'')
+    trLib.drawLine(dayAdrHigh50, 'D', hl, adrColor, adrStyle, 2, extend.right, showADRLabels and validTimeFrame, adrLabelXOffset50, validTimeFrame)
+    trLib.drawLine(dayAdrLow50, 'D', ll, adrColor, adrStyle, 2, extend.right, showADRLabels and validTimeFrame, adrLabelXOffset50, validTimeFrame)
+    trLib.rLabelOffset((dayAdrHigh50 + dayAdrLow50) / 2, '50% ADR ' + str.format('{0,number,#.##}', trLib.toPips(dayAdr/2)) + 'PIPS|' + str.tostring(dayAdr/2, format.mintick) + syminfo.currency, label.style_none, adrColor, showADRLabels and validTimeFrame and showADRRange, adrLabelXOffset50)
+
+alertcondition(ta.crossover(close,dayAdrHigh) and dayAdrHigh != 0.0 , "ADR High reached", "PA has reached the calculated ADR High")
+alertcondition(ta.crossunder(close,dayAdrLow) and dayAdrLow != 0.0 , "ADR Low reached", "PA has reached the calculated ADR Low")
+alertcondition(ta.crossover(close,dayAdrHigh50) and dayAdrHigh50 != 0.0 , "50% of ADR High reached", "PA has reached 50% of the calculated ADR High")
+alertcondition(ta.crossunder(close,dayAdrLow50) and dayAdrLow50 != 0.0 , "50% ADR Low reached", "PA has reached 50% the calculated ADR Low")
+
+// AWR
+[weekAdr, weekAdrHigh,weekAdrLow]  = request.security(syminfo.tickerid, 'W', trLib.adrHiLo(aWRRange, 1, showAWRWO), lookahead=barmerge.lookahead_on)
+weekAdrHigh50 = weekAdrHigh - (weekAdr/2)
+weekAdrLow50 = weekAdrLow + (weekAdr/2)
+
+if showAWR
+    string hl = 'Hi-AWR'+ (showAWRWO?'(WO)':'')
+    string ll = 'Lo-AWR'+ (showAWRWO?'(WO)':'')
+    trLib.drawLine(weekAdrHigh, 'W', hl, awrColor, awrStyle, 1, extend.right, showAWRLabels and validTimeFrame, adrLabelXOffset, validTimeFrame)
+    trLib.drawLine(weekAdrLow, 'W', ll, awrColor, awrStyle, 1, extend.right, showAWRLabels and validTimeFrame, adrLabelXOffset, validTimeFrame)
+    trLib.rLabelOffset((weekAdrHigh + weekAdrLow) / 2, 'AWR ' + str.format('{0,number,#.##}', trLib.toPips(weekAdr)) + 'PIPS|' + str.tostring(weekAdr, format.mintick) + syminfo.currency, label.style_none, awrColor, showAWRLabels and validTimeFrame and showAWRRange, adrLabelXOffset)
+
+if showAWR and showAWR50
+    string hl = '50% Hi-AWR'+ (showAWRWO?'(WO)':'')
+    string ll = '50% Lo-AWR'+ (showAWRWO?'(WO)':'')
+    trLib.drawLine(weekAdrHigh50, 'W', hl, awrColor, awrStyle, 1, extend.right, showAWRLabels and validTimeFrame, adrLabelXOffset50, validTimeFrame)
+    trLib.drawLine(weekAdrLow50, 'W', ll, awrColor, awrStyle, 1, extend.right, showAWRLabels and validTimeFrame, adrLabelXOffset50, validTimeFrame)
+    trLib.rLabelOffset((weekAdrHigh50 + weekAdrLow50) / 2, '50% AWR ' + str.format('{0,number,#.##}', trLib.toPips(weekAdr/2)) + 'PIPS|' + str.tostring(weekAdr/2, format.mintick) + syminfo.currency, label.style_none, awrColor, showAWRLabels and validTimeFrame and showAWRRange, adrLabelXOffset50)
+
+alertcondition(ta.crossover(close,weekAdrHigh) and weekAdrHigh != 0 , "AWR High reached", "PA has reached the calculated AWR High")
+alertcondition(ta.crossunder(close,weekAdrLow) and weekAdrLow != 0 , "AWR Low reached", "PA has reached the calculated AWR Low")
+alertcondition(ta.crossover(close,weekAdrHigh50) and weekAdrHigh50 != 0 , "50% of AWR High reached", "PA has reached 50% of the calculated AWR High")
+alertcondition(ta.crossunder(close,weekAdrLow50) and weekAdrLow50 != 0 , "50% AWR Low reached", "PA has reached 50% of the calculated AWR Low")
+
+// AMR
+[monthAdr, monthAdrHigh,monthAdrLow]  = request.security(syminfo.tickerid, 'M', trLib.adrHiLo(aMRRange, 1, showAMRMO), lookahead=barmerge.lookahead_on)
+monthAdrHigh50 = monthAdrHigh - (monthAdr/2)
+monthAdrLow50 = monthAdrLow + (monthAdr/2)
+
+if showAMR and timeframe.isminutes and timeframe.multiplier >= 3
+    string hl = 'Hi-AMR'+ (showAMRMO?'(MO)':'')
+    string ll = 'Lo-AMR'+ (showAMRMO?'(MO)':'')
+    trLib.drawLine(monthAdrHigh, 'M', hl, amrColor, amrStyle, 1, extend.right, showAMRLabels and validTimeFrame, adrLabelXOffset, validTimeFrame)
+    trLib.drawLine(monthAdrLow, 'M', ll, amrColor, amrStyle, 1, extend.right, showAMRLabels and validTimeFrame, adrLabelXOffset, validTimeFrame)
+    trLib.rLabelOffset((monthAdrHigh + monthAdrLow) / 2, 'AMR ' + str.format('{0,number,#.##}', trLib.toPips(monthAdr)) + 'PIPS|' + str.tostring(monthAdr, format.mintick) + syminfo.currency, label.style_none, amrColor, showAMRLabels and validTimeFrame and showAMRRange,adrLabelXOffset)
+
+if showAMR and showAMR50 and timeframe.isminutes and timeframe.multiplier >= 3
+    string hl = '50% Hi-AMR'+ (showAMRMO?'(MO)':'')
+    string ll = '50% Lo-AMR'+ (showAMRMO?'(MO)':'')
+    trLib.drawLine(monthAdrHigh50, 'M', hl, amrColor, amrStyle, 1, extend.right, showAMRLabels and validTimeFrame, adrLabelXOffset50, validTimeFrame)
+    trLib.drawLine(monthAdrLow50, 'M', ll, amrColor, amrStyle, 1, extend.right, showAMRLabels and validTimeFrame, adrLabelXOffset50, validTimeFrame)
+    trLib.rLabelOffset((monthAdrHigh50 + monthAdrLow50) / 2, '50% AMR ' + str.format('{0,number,#.##}', trLib.toPips(monthAdr/2)) + 'PIPS|' + str.tostring(monthAdr/2, format.mintick) + syminfo.currency, label.style_none, amrColor, showAMRLabels and validTimeFrame and showAMRRange,adrLabelXOffset50)
+
+alertcondition(ta.crossover(close,monthAdrHigh) and monthAdrHigh != 0 , "AMR High reached", "PA has reached the calculated AMR High")
+alertcondition(ta.crossunder(close,monthAdrLow) and monthAdrLow != 0 , "AMR Low reached", "PA has reached the calculated AMR Low")
+alertcondition(ta.crossover(close,monthAdrHigh50) and monthAdrHigh50 != 0 , "50% of AMR High reached", "PA has reached 50% of the calculated AMR High")
+alertcondition(ta.crossunder(close,monthAdrLow50) and monthAdrLow50 != 0 , "50% of AMR Low reached", "PA has reached 50% of the calculated AMR Low")
+
+// Significant Move Filter
+is_significant_move = (high - low) > dayAdr * atr_threshold_multiplier
+
+// Dynamic Take Profit and Stop Loss
+take_profit = close + dayAdr
+stop_loss = close - dayAdr

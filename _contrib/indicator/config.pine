@@ -1,0 +1,246 @@
+// config.pine
+
+// Misc
+bool show = true
+
+bool overrideSym = input.bool(group='PVSRA Override', title='Override chart symbol?', defval=false, inline='pvsra')
+string pvsraSym = input.string(group='PVSRA Override', title='', defval='INDEX:BTCUSD', tooltip='You can use INDEX:BTCUSD or you can combine multiple feeds, for example BINANCE:BTCUSDT+COINBASE:BTCUSD. Note that adding too many will slow things down.', inline='pvsra')
+
+// Function to fetch PVSRA data
+pvsraVolume(overrideSymbolX, pvsraSymbolX, tickerIdX) =>
+    request.security(overrideSymbolX ? pvsraSymbolX : tickerIdX, '', [volume, high, low, close, open], barmerge.gaps_off, barmerge.lookahead_off)
+
+// Label offsets
+levelStart = timeframe.isseconds == true or timeframe.isminutes == true and timeframe.multiplier < 5 ? time('D') : time('D') - 86400 * 1000
+
+labelOffsetInput = input.int(group='Label offsets', title='General', defval=12, inline='labeloffset1')
+pivotOffsetInput = input.int(group='Label offsets', title='Pivots', defval=6, inline='labeloffset1')
+adrOffsetInput = input.int(group='Label offsets', title='ADR', defval=12, inline='labeloffset1')
+adrOffsetInput50 = input.int(group='Label offsets', title='50% ADR', defval=12, inline='labeloffset1')
+rdOffsetInput = input.int(group='Label offsets', title='RD/W', defval=24, inline='labeloffset1')
+rdOffsetInput50 = input.int(group='Label offsets', title='50% RD/W', defval=24, inline='labeloffset1')
+pivotLabelXOffset = time_close + pivotOffsetInput * timeframe.multiplier * 60 * 1000
+
+// PVSRA Colors
+color redVectorColor = input.color(title='Vector: Red', group='PVSRA Colors', defval=color.red, inline='vectors')
+color greenVectorColor = input.color(title='Green', group='PVSRA Colors', defval=color.lime, inline='vectors')
+color violetVectorColor = input.color(title='Violet', group='PVSRA Colors', defval=color.fuchsia, inline='vectors')
+color blueVectorColor = input.color(title='Blue', group='PVSRA Colors', defval=color.blue, inline='vectors', tooltip='Bull bars are green and bear bars are red when the bar is with volume >= 200% of the average volume of the 10 previous bars, or bars where the product of candle spread x candle volume is >= the highest for the 10 previous bars.\n Bull bars are blue and bear are violet when the bar is with with volume >= 150% of the average volume of the 10 previous bars.')
+color regularCandleUpColor = input.color(title='Regular: Up Candle', group='PVSRA Colors', defval=#999999, inline='nonVectors')
+color regularCandleDownColor = input.color(title='Down Candle', group='PVSRA Colors', defval=#4d4d4d, inline='nonVectors', tooltip='Bull bars are light gray and bear are dark gray when none of the red/green/blue/violet vector conditions are met.')
+
+// EMAs
+showEmas = input.bool(group='EMAs', title='Show EMAs?', defval=true, inline='showemas')
+labelEmas = input.bool(group='EMAs', title='EMA Labels?', defval=false, inline='showemas')
+oneEmaColor = input.color(group='EMAs', title='EMA Color: 5', defval=color.rgb(254, 234, 74, 0), inline='emacolors')
+twoEmaColor = input.color(group='EMAs', title='13', defval=color.rgb(253, 84, 87, 0), inline='emacolors')
+threeEmaColor = input.color(group='EMAs', title='50', defval=color.rgb(31, 188, 211, 0), inline='emacolors')
+fourEmaColor = input.color(group='EMAs', title='200', defval=color.rgb(255, 255, 255, 0), inline='emacolors')
+fiveEmaColor = input.color(group='EMAs', title='800', defval=color.rgb(50, 34, 144, 0), inline='emacolors')
+emaCloudColor = input.color(group='EMAs', title='EMA Cloud', defval=color.rgb(155, 47, 174, 60), inline='emacloud')
+emaCloudBorderColor = input.color(group='EMAs', title='Border', defval=color.rgb(18, 137, 123, 100), inline='emacloud')
+
+// Pivot Points
+showLevelOnePivotPoints = input.bool(group='Pivot Points', title='Show Level: 1 R/S?', defval=false, inline='pivotlevels')
+showLevelTwoPivotPoints = input.bool(group='Pivot Points', title='2 R/S?', defval=false, inline='pivotlevels')
+showLevelThreePivotPoints = input.bool(group='Pivot Points', title=' 3 R/S?', defval=false, inline='pivotlevels')
+showPivotLabels = input.bool(group='Pivot Points', title='Show labels?', defval=true, inline='pivotlevels')
+string rsStyleX = input.string(group='Pivot Points', defval='Dashed', title='R/S Levels Line Style', options=['Dotted', 'Dashed', 'Solid'], inline='pivotcolorsRS')
+rsStyle = rsStyleX == 'Dotted' ? line.style_dotted : (rsStyleX == 'Dashed' ? line.style_dashed : (rsStyleX == 'Solid' ? line.style_solid : line.style_dashed))
+
+activeM = input.bool(group='Pivot Points', title='Show M levels?', defval=true, inline='mlevels')
+showMLabels = input.bool(group='Pivot Points', title='Labels?', defval=true, inline='mlevels')
+extendPivots = input.bool(group='Pivot Points', title='Extend lines in both directions?', defval=false)
+pivotColor = input.color(group='Pivot Points', title='Colors: Pivot Point', defval=color.rgb(254, 234, 78, 50), inline='pivotcolors')
+pivotLabelColor = input.color(group='Pivot Points', title='Pivot Point Label', defval=color.rgb(254, 234, 78, 50), inline='pivotcolors')
+mColor = input.color(group='Pivot Points', title='Colors: M Levels', defval=color.rgb(255, 255, 255, 50), inline='pivotcolors1')
+mLabelColor = input.color(group='Pivot Points', title='M Levels Label', defval=color.rgb(255, 255, 255, 50), inline='pivotcolors1')
+string mStyleX = input.string(group='Pivot Points', defval='Dashed', title='M Levels Line Style', options=['Dotted', 'Dashed', 'Solid'], inline='pivotcolors2')
+mStyle = mStyleX == 'Dotted' ? line.style_dotted : (mStyleX == 'Dashed' ? line.style_dashed : (mStyleX == 'Solid' ? line.style_solid : line.style_dashed))
+
+// Daily and Weekly High/Low
+showDayHighLow = input.bool(group="Yesterday's and Last Week's High/low", title='Show Hi/Lo: Daily?', defval=true, inline='highlow')
+dailyHiLoColor = color.new(color.blue, 50)
+showWeekHighLow = input.bool(group="Yesterday's and Last Week's High/low", title='Weekly?', defval=true, inline='highlow')
+weeklyHiLoColor = color.new(color.green, 60)
+showDayHighLowLabels = input.bool(group="Yesterday's and Last Week's High/low", title='Show labels?', defval=true, inline='highlow')
+
+// ADR, AWR, AMR
+showADR = input.bool(group='Average Daily Range - ADR', title='Show ADR?', defval=true, inline='adr')
+showADRDO = input.bool(group='Average Daily Range - ADR', title='Use Daily Open (DO) calc?', defval=false, inline='adr', tooltip='Measure the ADR from the daily open. This will make the ADR static throughout the day. ADR is usually measured taking today high and low. Since todays high and low will change throughout the day, some might prefer to have a static range instead.')
+showADRLabels = input.bool(group='Average Daily Range - ADR', title='Labels?', defval=true, inline='adr1')
+showADRRange = input.bool(group='Average Daily Range - ADR', title='Range label?', defval=false, inline='adr1')
+showADR50 = input.bool(group='Average Daily Range - ADR', title='Show 50% ADR?', defval=false, inline='adr1')
+aDRRange = input.int(group='Average Daily Range - ADR', title='ADR length (days)?', defval=14, minval=1, maxval=31, step=1, inline='adr2', tooltip="Defaults taken from mt4. This defines how many days back to take into consideration when calculating the ADR")
+adrColor = input.color(group='Average Daily Range - ADR', title='ADR Color', defval=color.new(color.silver, 50), inline='adr3')
+string adrStyleX = input.string(group='Average Daily Range - ADR', defval='Dotted', title='ADR Line Style', options=['Dotted', 'Dashed', 'Solid'], inline='adr3')
+adrStyle = adrStyleX == 'Dotted' ? line.style_dotted : (adrStyleX == 'Dashed' ? line.style_dashed : (adrStyleX == 'Solid' ? line.style_solid : line.style_dotted))
+
+showAWR = input.bool(group='Average Weekly Range - AWR', title='Show AWR?', defval=false, inline='awr')
+showAWRWO = input.bool(group='Average Weekly Range - AWR', title='Use Weekly Open (WO) calc?', defval=false, inline='awr', tooltip='Measure the AWR from the weekly open. This will make the AWR static throughout the week. AWR is usually measured taking this weeks high and low. Since this weeks high and low will change throughout the week, some might prefer to have a static range instead.')
+showAWRLabels = input.bool(group='Average Weekly Range - AWR', title='Labels?', defval=true, inline='awr1')
+showAWRRange = input.bool(group='Average Weekly Range - AWR', title='Range label?', defval=false, inline='awr1')
+showAWR50 = input.bool(group='Average Weekly Range - AWR', title='Show 50% AWR?', defval=false, inline='awr1')
+aWRRange = input.int(group='Average Weekly Range - AWR', title='AWR length (weeks)?', defval=4, minval=1, maxval=52, step=1, inline='awr2', tooltip="Defaults taken from mt4. This defines how many weeks back to take into consideration when calculating the AWR")
+awrColor = input.color(group='Average Weekly Range - AWR', title='AWR Color', defval=color.new(color.orange, 50), inline='awr3')
+string awrStyleX = input.string(group='Average Weekly Range - AWR', defval='Dotted', title='AWR Line Style', options=['Dotted', 'Dashed', 'Solid'], inline='awr3')
+awrStyle = awrStyleX == 'Dotted' ? line.style_dotted : (awrStyleX == 'Dashed' ? line.style_dashed : (awrStyleX == 'Solid' ? line.style_solid : line.style_dotted))
+
+showAMR = input.bool(group='Average Monthly Range - AMR', title='Show AMR?', defval=false, inline='amr')
+showAMRMO = input.bool(group='Average Monthly Range - AMR', title='Use Monthly Open (MO) calc?', defval=false, inline='amr',tooltip='Measure the AMR from the monthly open. This will make the AMR static throughout the month. AMR is usually measured taking this months high and low. Since this months high and low will change throughout the month, some might prefer to have a static range instead.')
+showAMRLabels = input.bool(group='Average Monthly Range - AMR', title='Labels?', defval=true, inline='amr1')
+showAMRRange = input.bool(group='Average Monthly Range - AMR', title='Range label?', defval=false, inline='amr1')
+showAMR50 = input.bool(group='Average Monthly Range - AMR', title='Show 50% AMR?', defval=false, inline='amr1')
+aMRRange = input.int(group='Average Monthly Range - AMR', title='AMR length (months)?', defval=6, minval=1, maxval=12, step=1, inline='amr2', tooltip="Defaults taken from mt4. This defines how many months back to take into consideration when calculating the AMR")
+amrColor = input.color(group='Average Monthly Range - AMR', title='AMR Color', defval=color.new(color.red, 50), inline='amr3')
+string amrStyleX = input.string(group='Average Monthly Range - AMR', defval='Dotted', title='AMR Line Style', options=['Dotted', 'Dashed', 'Solid'], inline='amr3')
+amrStyle = amrStyleX == 'Dotted' ? line.style_dotted : (amrStyleX == 'Dashed' ? line.style_dashed : (amrStyleX == 'Solid' ? line.style_solid : line.style_dotted))
+
+// Range Daily/Weekly
+showRD = input.bool(group='Range Daily Hi/Lo - RD Hi/Lo', title='Show RD?', defval=false, inline='rd')
+showRDDO = input.bool(group='Range Daily Hi/Lo - RD Hi/Lo', title='Use Daily Open (DO) calc?', defval=false, inline='rd',tooltip='Measure the RD from the daily open. This will make the RD static throughout the day. RD is usually measured taking todays high and low. Since today high and low will change throughout the day, some might prefer to have a static range instead.')
+showRDLabels = input.bool(group='Range Daily Hi/Lo - RD Hi/Lo', title='Labels?', defval=true, inline='rd1')
+showRDRange = input.bool(group='Range Daily Hi/Lo - RD Hi/Lo', title='Range label?', defval=false, inline='rd1')
+showRD50 = input.bool(group='Range Daily Hi/Lo - RD Hi/Lo', title='Show 50% RD?', defval=false, inline='rd1')
+rdRange = input.int(group='Range Daily Hi/Lo - RD Hi/Lo', title='RD length (days)?', defval=15, minval=1, maxval=31, step=1, inline='rd2', tooltip="Defaults taken from Trader At Home PVSRA documentation. This defines how many days back to take into consideration when calculating the RD")
+rdColor = input.color(group='Range Daily Hi/Lo - RD Hi/Lo', title='RD Color', defval=color.new(color.red, 30), inline='rd3')
+string rdStyleX = input.string(group='Range Daily Hi/Lo - RD Hi/Lo', defval='Solid', title='RD Line Style', options=['Dotted', 'Dashed', 'Solid'], inline='rd3')
+rdStyle = rdStyleX == 'Dotted' ? line.style_dotted : (rdStyleX == 'Dashed' ? line.style_dashed : (rdStyleX == 'Solid' ? line.style_solid : line.style_dotted))
+
+showRW = input.bool(group='Range Weekly Hi/Lo - RW Hi/Lo', title='Show RW?', defval=false, inline='rw')
+showRWWO = input.bool(group='Range Weekly Hi/Lo - RW Hi/Lo', title='Use Weekly Open (WO) calc?', defval=false, inline='rw', tooltip='Measure the RW from the weekly open. This will make the RW static throughout the week. RW is usually measured taking this weeks high and low. Since this weeks high and low will change throughout the week, some might prefer to have a static range instead.')
+showRWLabels = input.bool(group='Range Weekly Hi/Lo - RW Hi/Lo', title='Labels?', defval=true, inline='rw1')
+showRWRange = input.bool(group='Range Weekly Hi/Lo - RW Hi/Lo', title='Range label?', defval=false, inline='rw1')
+showRW50 = input.bool(group='Range Weekly Hi/Lo - RW Hi/Lo', title='Show 50% RW?', defval=false, inline='rw1')
+rwRange = input.int(group='Range Weekly Hi/Lo - RW Hi/Lo', title='RW length (weeks)?', defval=13, minval=1, maxval=52, step=1, inline='rw2', tooltip="Defaults taken from Trader At Home PVSRA documentation. This defines how many weeks back to take into consideration when calculating the RW")
+rwColor = input.color(group='Range Weekly Hi/Lo - RW Hi/Lo', title='RW Color', defval=color.new(color.blue, 30), inline='rw3')
+string rwStyleX = input.string(group='Range Weekly Hi/Lo - RW Hi/Lo', defval='Solid', title='RW Line Style', options=['Dotted', 'Dashed', 'Solid'], inline='rw3')
+rwStyle = rwStyleX == 'Dotted' ? line.style_dotted : (rwStyleX == 'Dashed' ? line.style_dashed : (rwStyleX == 'Solid' ? line.style_solid : line.style_dotted))
+
+// ADR Table
+showAdrTable = input.bool(group='ADR/ADRx3/AWR/AMR Table', title='Show ADR Table', inline='adrt', defval=true)
+showAdrPips = input.bool(group='ADR/ADRx3/AWR/AMR Table', title='Show ADR PIPS', inline='adrt', defval=true) and showAdrTable
+showAdrCurrency = input.bool(group='ADR/ADRx3/AWR/AMR Table', title='Show ADR Currency', inline='adrt', defval=false) and showAdrTable
+showRDPips = input.bool(group='ADR/ADRx3/AWR/AMR Table', title='Show RD PIPS', inline='adrt', defval=false) and showAdrTable
+showRDCurrency = input.bool(group='ADR/ADRx3/AWR/AMR Table', title='Show RD Currency', inline='adrt', defval=false) and showAdrTable
+choiceAdrTable = input.string(group='ADR/ADRx3/AWR/AMR Table', title='ADR Table postion', inline='adrt', defval='top_right', options=['top_right', 'top_left', 'top_center', 'bottom_right', 'bottom_left', 'bottom_center'])
+adrTableBgColor = input.color(group='ADR/ADRx3/AWR/AMR Table', title='ADR Table: Background Color', inline='adrtc', defval=color.rgb(93, 96, 107, 70))
+adrTableTxtColor = input.color(group='ADR/ADRx3/AWR/AMR Table', title='Text Color', inline='adrtc', defval=color.rgb(31, 188, 211, 0))
+
+// Market Sessions
+showMarkets = input.bool(true, group='Market sessions', title='Show Market Sessions?', tooltip='Turn on or off all market sessions') and show
+showMarketsWeekends = input.bool(false, group='Market sessions', title='Show Market Session on Weekends?', tooltip='Turn on or off market sessions in the weekends. Note do not turn this on for exchanges that dont have weekend data like OANDA') and show
+string weekendSessions = ':1234567'
+string noWeekendSessions = ':23456'
+
+// London Session
+showRectangle1 = input.bool(group='Market session: London (0800-1630 UTC+0) - DST Aware', defval=true, title='Show: session?', inline='session1conf', tooltip='If this checkbox is off, Label and Open Range have no effect') and showMarkets
+showLabel1 = input.bool(group='Market session: London (0800-1630 UTC+0) - DST Aware', defval=true, title='Label?', inline='session1conf') and showRectangle1 and showMarkets
+showOr1 = input.bool(group='Market session: London (0800-1630 UTC+0) - DST Aware', defval=true, title='Opening Range?', inline='session1conf', tooltip='This controls the shaded area for the session') and showRectangle1 and showMarkets
+string sess1Label = input.string(group='Market session: London (0800-1630 UTC+0) - DST Aware', defval='London', title='Name:', inline='session1style')
+color sess1col = input.color(group='Market session: London (0800-1630 UTC+0) - DST Aware', title='Color: Box', defval=color.rgb(120, 123, 134, 75), inline='session1style')
+color sess1colLabel = input.color(group='Market session: London (0800-1630 UTC+0) - DST Aware', title='Label', defval=color.rgb(120, 123, 134, 0), inline='session1style')
+string sess1TimeX = '0800-1630'
+sess1Time = showMarketsWeekends ? sess1TimeX + weekendSessions : sess1TimeX + noWeekendSessions
+
+// New York Session
+showRectangle2 = input.bool(group='Market session: New York (1430-2100 UTC+0) - DST Aware', defval=true, title='Show: session?', inline='session2conf', tooltip='If this checkbox is off, Label and Open Range have no effect') and showMarkets
+showLabel2 = input.bool(group='Market session: New York (1430-2100 UTC+0) - DST Aware', defval=true, title='Label?', inline='session2conf') and showRectangle2 and showMarkets
+showOr2 = input.bool(group='Market session: New York (1430-2100 UTC+0) - DST Aware', defval=true, title='Opening Range?', inline='session2conf', tooltip='This controls the shaded area for the session') and showRectangle2 and showMarkets
+string sess2Label = input.string(group='Market session: New York (1430-2100 UTC+0) - DST Aware', defval='NewYork', title='Name:', inline='session2style')
+color sess2col = input.color(group='Market session: New York (1430-2100 UTC+0) - DST Aware', title='Color: Box', defval=color.rgb(251, 86, 91, 75), inline='session2style')
+color sess2colLabel = input.color(group='Market session: New York (1430-2100 UTC+0) - DST Aware', title='Label', defval=color.rgb(253, 84, 87, 25), inline='session2style')
+string sess2TimeX = '1430-2100'
+sess2Time = showMarketsWeekends ? sess2TimeX + weekendSessions : sess2TimeX  + noWeekendSessions
+
+// Tokyo Session
+showRectangle3 = input.bool(group='Market session: Tokyo (0000-0600 UTC+0) - DST Aware', defval=true, title='Show: session?', inline='session3conf', tooltip='If this checkbox is off, Label and Open Range have no effect') and showMarkets
+showLabel3 = input.bool(group='Market session: Tokyo (0000-0600 UTC+0) - DST Aware', defval=true, title='Label?', inline='session3conf') and showRectangle3 and showMarkets
+showOr3 = input.bool(group='Market session: Tokyo (0000-0600 UTC+0) - DST Aware', defval=true, title='Opening Range?', inline='session3conf', tooltip='This controls the shaded area for the session') and showRectangle3 and showMarkets
+string sess3Label = input.string(group='Market session: Tokyo (0000-0600 UTC+0) - DST Aware', defval='Tokyo', title='Name:', inline='session3style')
+color sess3col = input.color(group='Market session: Tokyo (0000-0600 UTC+0) - DST Aware', title='Color: Box', defval=color.rgb(80, 174, 85, 75), inline='session3style')
+color sess3colLabel = input.color(group='Market session: Tokyo (0000-0600 UTC+0) - DST Aware', title='Label', defval=color.rgb(80, 174, 85, 25), inline='session3style')
+string sess3TimeX = '0000-0600'
+sess3Time = showMarketsWeekends ? sess3TimeX + weekendSessions : sess3TimeX + noWeekendSessions
+
+// Hong Kong Session
+showRectangle4 = input.bool(group='Market session: Hong Kong (0130-0800 UTC+0) - DST Aware', defval=true, title='Show: session?', inline='session4conf', tooltip='If this checkbox is off, Label and Open Range have no effect') and showMarkets
+showLabel4 = input.bool(group='Market session: Hong Kong (0130-0800 UTC+0) - DST Aware', defval=true, title='Label?', inline='session4conf') and showRectangle4 and showMarkets
+showOr4 = input.bool(group='Market session: Hong Kong (0130-0800 UTC+0) - DST Aware', defval=true, title='Opening Range?', inline='session4conf', tooltip='This controls the shaded area for the session') and showRectangle4 and showMarkets
+string sess4Label = input.string(group='Market session: Hong Kong (0130-0800 UTC+0) - DST Aware', defval='HongKong', title='Name:', inline='session4style')
+color sess4col = input.color(group='Market session: Hong Kong (0130-0800 UTC+0) - DST Aware', title='Color: Box', defval=color.rgb(128, 127, 23, 75), inline='session4style')
+color sess4colLabel = input.color(group='Market session: Hong Kong (0130-0800 UTC+0) - DST Aware', title='Label', defval=color.rgb(128, 127, 23, 25), inline='session4style')
+string sess4TimeX = '0130-0800'
+sess4Time = showMarketsWeekends ? sess4TimeX + weekendSessions : sess4TimeX + noWeekendSessions
+
+// Sydney Session
+showRectangle5 = input.bool(group='Market session: Sydney (NZX+ASX 2200-0600 UTC+0) - DST Aware', defval=true, title='Show: session?', inline='session5conf', tooltip='If this checkbox is off, Label and Open Range have no effect') and showMarkets
+showLabel5 = input.bool(group='Market session: Sydney (NZX+ASX 2200-0600 UTC+0) - DST Aware', defval=true, title='Label?', inline='session5conf') and showRectangle5 and showMarkets
+showOr5 = input.bool(group='Market session: Sydney (NZX+ASX 2200-0600 UTC+0) - DST Aware', defval=true, title='Opening Range?', inline='session5conf', tooltip='This controls the shaded area for the session') and showRectangle5 and showMarkets
+string sess5Label = input.string(group='Market session: Sydney (NZX+ASX 2200-0600 UTC+0) - DST Aware', defval='Sydney', title='Name:', inline='session5style')
+color sess5col = input.color(group='Market session: Sydney (NZX+ASX 2200-0600 UTC+0) - DST Aware', title='Color: Box', defval=color.rgb(37, 228, 123, 75), inline='session5style')
+color sess5colLabel = input.color(group='Market session: Sydney (NZX+ASX 2200-0600 UTC+0) - DST Aware', title='Label', defval=color.rgb(37, 228, 123, 25), inline='session5style')
+string sess5TimeX = '2200-0600'
+sess5Time = showMarketsWeekends ? sess5TimeX + weekendSessions : sess5TimeX + noWeekendSessions
+
+// EU Brinks Session
+showRectangle6 = input.bool(group='Market session: EU Brinks (0800-0900 UTC+0) - DST Aware', defval=true, title='Show: session?', inline='session6conf', tooltip='If this checkbox is off, Label and Open Range have no effect') and showMarkets
+showLabel6 = input.bool(group='Market session: EU Brinks (0800-0900 UTC+0) - DST Aware', defval=true, title='Label?', inline='session6conf') and showRectangle6 and showMarkets
+showOr6 = input.bool(group='Market session: EU Brinks (0800-0900 UTC+0) - DST Aware', defval=true, title='Opening Range?', inline='session6conf', tooltip='This controls the shaded area for the session') and showRectangle6 and showMarkets
+string sess6Label = input.string(group='Market session: EU Brinks (0800-0900 UTC+0) - DST Aware', defval='EU Brinks', title='Name:', inline='session6style')
+color sess6col = input.color(group='Market session: EU Brinks (0800-0900 UTC+0) - DST Aware', title='Color: Box', defval=color.rgb(255, 255, 255, 65), inline='session6style')
+color sess6colLabel = input.color(group='Market session: EU Brinks (0800-0900 UTC+0) - DST Aware', title='Label', defval=color.rgb(255, 255, 255, 25), inline='session6style')
+string sess6TimeX = '0800-0900'
+sess6Time = showMarketsWeekends ? sess6TimeX + weekendSessions : sess6TimeX + noWeekendSessions
+
+// US Brinks Session
+showRectangle7 = input.bool(group='Market session: US Brinks (1400-1500 UTC+0) - DST Aware', defval=true, title='Show: session?', inline='session7conf', tooltip='If this checkbox is off, Label and Open Range have no effect') and showMarkets
+showLabel7 = input.bool(group='Market session: US Brinks (1400-1500 UTC+0) - DST Aware', defval=true, title='Label?', inline='session7conf') and showRectangle7 and showMarkets
+showOr7 = input.bool(group='Market session: US Brinks (1400-1500 UTC+0) - DST Aware', defval=true, title='Opening Range?', inline='session7conf', tooltip='This controls the shaded area for the session') and showRectangle7 and showMarkets
+string sess7Label = input.string(group='Market session: US Brinks (1400-1500 UTC+0) - DST Aware', defval='US Brinks', title='Name:', inline='session7style')
+color sess7col = input.color(group='Market session: US Brinks (1400-1500 UTC+0) - DST Aware', title='Color: Box', defval=color.rgb(255, 255, 255, 65), inline='session7style')
+color sess7colLabel = input.color(group='Market session: US Brinks (1400-1500 UTC+0) - DST Aware', title='Label', defval=color.rgb(255, 255, 255, 25), inline='session7style')
+string sess7TimeX = '1400-1500'
+sess7Time = showMarketsWeekends ? sess7TimeX + weekendSessions : sess7TimeX + noWeekendSessions
+
+// Frankfurt Session
+showRectangle8 = input.bool(group='Market session: Frankfurt (0700-1630 UTC+0) - DST Aware', defval=false, title='Show: session?', inline='session8conf', tooltip='If this checkbox is off, Label and Open Range have no effect') and showMarkets
+showLabel8 = input.bool(group='Market session: Frankfurt (0700-1630 UTC+0) - DST Aware', defval=true, title='Label?', inline='session8conf') and showRectangle8 and showMarkets
+showOr8 = input.bool(group='Market session: Frankfurt (0700-1630 UTC+0) - DST Aware', defval=true, title='Opening Range?', inline='session8conf', tooltip='This controls the shaded area for the session') and showRectangle8 and showMarkets
+string sess8Label = input.string(group='Market session: Frankfurt (0700-1630 UTC+0) - DST Aware', defval='Frankfurt', title='Name:', inline='session8style')
+color sess8col = input.color(group='Market session: Frankfurt (0700-1630 UTC+0) - DST Aware', title='Color: Box', defval=color.rgb(253, 152, 39, 75), inline='session8style')
+color sess8colLabel = input.color(group='Market session: Frankfurt (0700-1630 UTC+0) - DST Aware', title='Label', defval=color.rgb(253, 152, 39, 25), inline='session8style')
+string sess8TimeX = '0700-1630'
+sess8Time = showMarketsWeekends ? sess8TimeX + weekendSessions : sess8TimeX + noWeekendSessions
+
+// Psy Levels
+showPsy = timeframe.isminutes and (timeframe.multiplier == 60 or timeframe.multiplier == 30 or timeframe.multiplier == 15 or timeframe.multiplier == 5 or timeframe.multiplier == 3 or timeframe.multiplier == 1)
+showPsylevels = input.bool(group='Weekly Psy Levels (valid tf 1h/30min/15min/5min/3min/1min)', defval=true, title='Show: Levels?', inline='psyconf') and showPsy
+showPsylabel = input.bool(group='Weekly Psy Levels (valid tf 1h/30min/15min/5min/3min/1min)', defval=true, title='Labels?', inline='psyconf', tooltip="The Psy High/Low will only show on these timeframes: 1h/30min/15min/5min/3min/1min. It is disabled on all others. This is because the calculation requires a candle to start at the correct time for Sydney/Tokyo but in other timeframes the data does not have values at the designated time for the Sydney/Tokyo sessions.") and showPsylevels
+showAllPsy = input.bool(group='Weekly Psy Levels (valid tf 1h/30min/15min/5min/3min/1min)', defval=false, title='Show historical psy levels?', inline='psyconf') and showPsylevels
+color psyColH = input.color(group='Weekly Psy Levels (valid tf 1h/30min/15min/5min/3min/1min)', title='Psy Hi Color', defval=color.new(color.orange, 30), inline='psyconf1')
+color psyColL = input.color(group='Weekly Psy Levels (valid tf 1h/30min/15min/5min/3min/1min)', title='Psy Low Color', defval=color.new(color.orange, 30), inline='psyconf1')
+bool overridePsyType = input.bool(group='Weekly Psy Levels (valid tf 1h/30min/15min/5min/3min/1min)', defval=false, title='Override PsyType', inline='psyconf12')
+string psyTypeX = input.string(group='Weekly Psy Levels (valid tf 1h/30min/15min/5min/3min/1min)', defval='crypto', title='Psy calc type', options=['crypto', 'forex'], inline='psyconf12', tooltip="Selecting the override psy type lets you manually adjust the psy type otherwise it will be automatic. If the override psy type checkbox is of then this setting has no effect. usAre you looking at Crypto or Forex? Crypto calculations start with the Sydney session on Saturday night. Forex calculations start with the Tokyo session on Monday morning. Note some exchanges like Oanda do not have sessions on the weekends so you might be forced to select Forex for exchanges like Oanda even when looking at symbols like BITCOIN on Oanda.")
+string psyType = overridePsyType ? psyTypeX : (syminfo.type == 'forex' ? 'forex' : 'crypto')
+
+// DST Table
+showDstTable = input.bool(group='Daylight Saving Time Info (DST)', title='Show DST Table : ', inline='dstt', defval=false)
+choiceDstTable = input.string(group='Daylight Saving Time Info (DST)', title='DST Table postion', inline='dstt', defval='bottom_center', options=['top_right', 'top_left', 'top_center', 'bottom_right', 'bottom_left', 'bottom_center'])
+dstTableBgColor = input.color(group='Daylight Saving Time Info (DST)', title='DST Table: Background Color', inline='dsttc', defval=color.rgb(93, 96, 107, 70))
+dstTableTxtColor = input.color(group='Daylight Saving Time Info (DST)', title='Text Color', inline='dsttc', defval=color.rgb(31, 188, 211, 0))
+
+// Misc
+labelXOffset = time_close + labelOffsetInput * timeframe.multiplier * 60 * 1000
+validTimeFrame = timeframe.isintraday == true
+string rectStyle = input.string(group='Market sessions', defval='Dashed', title='Line style of Market Session hi/lo line', options=['Dashed', 'Solid'])
+bool showVCZ = input.bool(true, 'Show VCZ?', group='Vector Candle Zones', inline="vczOn")
+adrLabelXOffset = time_close + adrOffsetInput * timeframe.multiplier * 60 * 1000
+adrLabelXOffset50 = time_close + adrOffsetInput50 * timeframe.multiplier * 60 * 1000
+
+// Configuration for W and M formations
+bool show_w_m_formations = input.bool(true, title="Show W and M Formations", group="Patterns")
+float atr_threshold_multiplier = input.float(1.0, title="ATR Threshold Multiplier", group="Patterns")
+
+// Configuration for vector candles
+float volume_multiplier = input.float(2.0, title="Volume Multiplier for Vector Candles", group="Volume")

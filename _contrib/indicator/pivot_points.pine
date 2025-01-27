@@ -1,0 +1,47 @@
+// pivot_points.pine
+
+// Get Daily price data
+dayHigh = f_security(syminfo.tickerid, 'D', high, false)
+dayLow = f_security(syminfo.tickerid, 'D', low, false)
+dayOpen = f_security(syminfo.tickerid, 'D', open, false)
+dayClose = f_security(syminfo.tickerid, 'D', close, false)
+
+// Compute Values
+pivotPoint = (dayHigh + dayLow + dayClose) / 3
+
+// Updated 2021-03-25 by infernix
+pivR1 = 2 * pivotPoint - dayLow
+pivS1 = 2 * pivotPoint - dayHigh
+pivR2 = pivotPoint - pivS1 + pivR1
+pivS2 = pivotPoint - pivR1 + pivS1
+pivR3 = 2 * pivotPoint + dayHigh - 2 * dayLow
+pivS3 = 2 * pivotPoint - (2 * dayHigh - dayLow)
+
+// Plot Values
+pivline = trLib.drawPivot(validTimeFrame and (showLevelOnePivotPoints or showLevelTwoPivotPoints or showLevelThreePivotPoints or activeM) ? pivotPoint : na, 'D', 'PP', pivotColor, pivotLabelColor, mStyle, 1, extendPivots ? extend.both : extend.right, showPivotLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+pivr1line = trLib.drawPivot(validTimeFrame and showLevelOnePivotPoints ? pivR1 : na, 'D', 'R1', color.new(color.green, 50), color.new(color.green, 50), rsStyle, 1, extendPivots ? extend.both : extend.right, showLevelOnePivotPoints and showPivotLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+pivs1line = trLib.drawPivot(validTimeFrame and showLevelOnePivotPoints ? pivS1 : na, 'D', 'S1', color.new(color.red, 50), color.new(color.red, 50), rsStyle, 1, extendPivots ? extend.both : extend.right, showLevelOnePivotPoints and showPivotLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+pivr2line = trLib.drawPivot(validTimeFrame and showLevelTwoPivotPoints ? pivR2 : na, 'D', 'R2', color.new(color.green, 50), color.new(color.green, 50), rsStyle, 1, extendPivots ? extend.both : extend.right, showLevelTwoPivotPoints and showPivotLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+pivs2line = trLib.drawPivot(validTimeFrame and showLevelTwoPivotPoints ? pivS2 : na, 'D', 'S2', color.new(color.red, 50), color.new(color.red, 50), rsStyle, 1, extendPivots ? extend.both : extend.right, showLevelTwoPivotPoints and showPivotLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+pivr3line = trLib.drawPivot(validTimeFrame and showLevelThreePivotPoints ? pivR3 : na, 'D', 'R3', color.new(color.green, 50), color.new(color.green, 50), rsStyle, 1, extendPivots ? extend.both : extend.right, showLevelThreePivotPoints and showPivotLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+pivs3line = trLib.drawPivot(validTimeFrame and showLevelThreePivotPoints ? pivS3 : na, 'D', 'S3', color.new(color.red, 50), color.new(color.red, 50), rsStyle, 1, extendPivots ? extend.both : extend.right, showLevelThreePivotPoints and showPivotLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+
+// M Levels
+m0C = (pivS2 + pivS3) / 2
+m1C = (pivS1 + pivS2) / 2
+m2C = (pivotPoint + pivS1) / 2
+m3C = (pivotPoint + pivR1) / 2
+m4C = (pivR1 + pivR2) / 2
+m5C = (pivR2 + pivR3) / 2
+
+// Draw M Levels
+trLib.drawPivot(validTimeFrame and activeM and not na(m0C) ? m0C : na, 'D', 'M0', mColor, mLabelColor, mStyle, 1, extendPivots ? extend.both : extend.right, showMLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+trLib.drawPivot(validTimeFrame and activeM and not na(m1C) ? m1C : na, 'D', 'M1', mColor, mLabelColor, mStyle, 1, extendPivots ? extend.both : extend.right, showMLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+trLib.drawPivot(validTimeFrame and activeM and not na(m2C) ? m2C : na, 'D', 'M2', mColor, mLabelColor, mStyle, 1, extendPivots ? extend.both : extend.right, showMLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+trLib.drawPivot(validTimeFrame and activeM and not na(m3C) ? m3C : na, 'D', 'M3', mColor, mLabelColor, mStyle, 1, extendPivots ? extend.both : extend.right, showMLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+trLib.drawPivot(validTimeFrame and activeM and not na(m4C) ? m4C : na, 'D', 'M4', mColor, mLabelColor, mStyle, 1, extendPivots ? extend.both : extend.right, showMLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+trLib.drawPivot(validTimeFrame and activeM and not na(m5C) ? m5C : na, 'D', 'M5', mColor, mLabelColor, mStyle, 1, extendPivots ? extend.both : extend.right, showMLabels and validTimeFrame, validTimeFrame, levelStart, pivotLabelXOffset)
+
+// Detect Key Levels for W and M Formations
+is_key_level_w = low[1] == pivS1
+is_key_level_m = high[1] == pivS1
