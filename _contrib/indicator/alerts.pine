@@ -1,68 +1,75 @@
-// === Inputs ===
+// Inputs
 webhookURL = input.string("https://your-api-endpoint.com/webhook", title="Webhook URL")
+bars_to_include = input.int(50, title="Number of Historical Bars", minval=10, maxval=100)
 
-// === Volume Spike ===
+// EMA Calculation
+ema_50 = ta.ema(close, 50)
+ema_200 = ta.ema(close, 200)
+ema_800 = ta.ema(close, 800)
+
+// ATR Calculation
+atr = ta.atr(14)
+
+// MACD Calculation
+[macd_line, signal_line, macd_hist] = ta.macd(close, 12, 26, 9)
+
+// RSI Calculation
+rsi_value = ta.rsi(close, 14)
+
+// Volume Spike Detection
+avg_volume = ta.sma(volume, 14)
 is_volume_spike = volume > avg_volume * 2
 
-// === RSI Filter ===
-rsi_value = ta.rsi(close, 14)
-is_rsi_filtered_long = rsi_value < 70  // Not overbought
-is_rsi_filtered_short = rsi_value > 30 // Not oversold
+// W and M Formations
+is_w_formation = low[2] > low[1] and low[1] < low and high[1] > high[2] and high > high[1] and close > close[1]
+is_m_formation = high[2] < high[1] and high[1] > high and low[1] < low[2] and low < low[1] and close < close[1]
 
-// === EMA Fan-Out Confirmation ===
-is_ema_fanned_out = ema_50 > ema_200 and ema_200 > ema_800
+// Historical Data
+var array<line> recent_candles = array.new_line()
+if bar_index >= bars_to_include
+    array.clear(recent_candles)
+    for i = 0 to bars_to_include - 1
+        recent_data = {
+            "open": open[i],
+            "high": high[i],
+            "low": low[i],
+            "close": close[i],
+            "volume": volume[i]
+        }
+        array.push(recent_candles, recent_data)
 
-// === First Green Vector Candle Above 50 EMA (Long Entry) ===
-is_long_entry = is_green_vector and is_cross_above_ema_50 and is_volume_spike and is_rsi_filtered_long and is_ema_fanned_out
+// Determine Current Session
+current_hour = hour(time)
+market_session = current_hour >= 8 and current_hour < 16 ? "London" :
+                 current_hour >= 16 and current_hour < 24 ? "New York" :
+                 "Other"
 
-long_payload ='{"symbol": "' + syminfo.ticker + '", ' + '"timestamp": "' + str.tostring(time) + '", ' + '"price": ' + str.tostring(close) + ', ' + '"direction": "long", ' + '"strategy": "First Green Vector Above 50 EMA", ' + '"timeframe": "' + timeframe.period + '", ' + '"ema_50": ' + str.tostring(ema_50) + ', ' + '"ema_200": ' + str.tostring(ema_200) + ', ' + '"ema_800": ' + str.tostring(ema_800) + ', ' + '"volume": ' + str.tostring(volume) + ', ' + '"rsi": ' + str.tostring(rsi_value) + '}'
+// Payload Construction
+construct_payload(_direction, _strategy) =>
+    '{' +
+    '"symbol": "' + syminfo.ticker + '", ' +
+    '"timestamp": "' + str.tostring(time) + '", ' +
+    '"price": ' + str.tostring(close) + ', ' +
+    '"direction": "' + _direction + '", ' +
+    '"strategy": "' + _strategy + '", ' +
+    '"timeframe": "' + timeframe.period + '", ' +
+    '"ema_50": ' + str.tostring(ema_50) + ', ' +
+    '"ema_200": ' + str.tostring(ema_200) + ', ' +
+    '"ema_800": ' + str.tostring(ema_800) + ', ' +
+    '"atr": ' + str.tostring(atr) + ', ' +
+    '"macd": {"line": ' + str.tostring(macd_line) + ', "signal": ' + str.tostring(signal_line) + ', "histogram": ' + str.tostring(macd_hist) + '}, ' +
+    '"rsi": ' + str.tostring(rsi_value) + ', ' +
+    '"volume": ' + str.tostring(volume) + ', ' +
+    '"session": "' + market_session + '", ' +
+    '"recent_candles": ' + str.tostring(array.slice(recent_candles, 0, array.size(recent_candles))) + ' ' +
+    '}'
 
-if is_long_entry
+// Long Entry Alert
+if is_w_formation and is_volume_spike and rsi_value < 70
+    long_payload = construct_payload("long", "W Formation")
     alert(long_payload, alert.freq_once_per_bar)
 
-// === First Red Vector Candle Below 50 EMA (Short Entry) ===
-is_short_entry = is_red_vector and is_cross_below_ema_50 and is_volume_spike and is_rsi_filtered_short and is_ema_fanned_out
-
-short_payload = '{"symbol": "' + syminfo.ticker + '", ' + '"timestamp": "' + str.tostring(time) + '", ' + '"price": ' + str.tostring(close) + ', ' + '"direction": "short", ' + '"strategy": "First Red Vector Below 50 EMA", ' + '"timeframe": "' + timeframe.period + '", ' + '"ema_50": ' + str.tostring(ema_50) + ', ' + '"ema_200": ' + str.tostring(ema_200) + ', ' + '"ema_800": ' + str.tostring(ema_800) + ', ' + '"volume": ' + str.tostring(volume) + ', ' + '"rsi": ' + str.tostring(rsi_value) + '}'
-
-if is_short_entry
+// Short Entry Alert
+if is_m_formation and is_volume_spike and rsi_value > 30
+    short_payload = construct_payload("short", "M Formation")
     alert(short_payload, alert.freq_once_per_bar)
-
-// === W Formation Confirmation (Long Entry) ===
-
-// Check if green vector candles have been recovered
-is_green_vector_recovered = false
-for i = 1 to 50
-    if high[i] > high[i+1] and close[i] > open[i] and volume[i] > ta.sma(volume, 14)[i] * 2
-        is_green_vector_recovered := true
-        break
-
-is_w_confirmation = is_w_formation and is_green_vector_recovered and close > high[1] and is_volume_spike and is_rsi_filtered_long and is_ema_fanned_out
-
-// Calculate W Formation Size
-w_formation_height = high[1] - low[1]  // Height of the W formation
-w_estimated_move = w_formation_height * 1.5  // Estimated move (1.5x the height)
-
-w_payload = '{"symbol": "' + syminfo.ticker + '", ' + '"timestamp": "' + str.tostring(time) + '", ' + '"price": ' + str.tostring(close) + ', ' + '"direction": "long", ' + '"strategy": "W Formation Confirmation", ' + '"timeframe": "' + timeframe.period + '", ' + '"w_formation_height": ' + str.tostring(w_formation_height) + ', ' + '"w_estimated_move": ' + str.tostring(w_estimated_move) + ', ' + '"ema_50": ' + str.tostring(ema_50) + ', ' + '"ema_200": ' + str.tostring(ema_200) + ', ' + '"ema_800": ' + str.tostring(ema_800) + ', ' + '"volume": ' + str.tostring(volume) + ', ' + '"rsi": ' + str.tostring(rsi_value) + '}'
-
-if is_w_confirmation
-    alert(w_payload, alert.freq_once_per_bar)
-
-// === M Formation Confirmation (Short Entry) ===
-// Check if red vector candles have been recovered
-is_red_vector_recovered = false
-for i = 1 to 50
-    if low[i] < low[i+1] and close[i] < open[i] and volume[i] > ta.sma(volume, 14)[i] * 2
-        is_red_vector_recovered := true
-        break
-
-is_m_confirmation = is_m_formation and is_red_vector_recovered and close < low[1] and is_volume_spike and is_rsi_filtered_short and is_ema_fanned_out
-
-// Calculate M Formation Size
-m_formation_height = high[1] - low[1]  // Height of the M formation
-m_estimated_move = m_formation_height * 1.5  // Estimated move (1.5x the height)
-
-m_payload = '{"symbol": "' + syminfo.ticker + '", ' + '"timestamp": "' + str.tostring(time) + '", ' + '"price": ' + str.tostring(close) + ', ' + '"direction": "short", ' + '"strategy": "M Formation Confirmation", ' + '"timeframe": "' + timeframe.period + '", ' + '"m_formation_height": ' + str.tostring(m_formation_height) + ', ' + '"m_estimated_move": ' + str.tostring(m_estimated_move) + ', ' + '"ema_50": ' + str.tostring(ema_50) + ', ' + '"ema_200": ' + str.tostring(ema_200) + ', ' + '"ema_800": ' + str.tostring(ema_800) + ', ' + '"volume": ' + str.tostring(volume) + ', ' + '"rsi": ' + str.tostring(rsi_value) + '}'
-
-if is_m_confirmation
-    alert(m_payload, alert.freq_once_per_bar)

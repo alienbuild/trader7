@@ -1,4 +1,17 @@
-.idea/.gitignore
-.idea/modules.xml
-.idea/trader7.iml
-.idea/vcs.xml
+# Node.js specific
+node_modules/
+npm-debug.log
+yarn-error.log
+*.log
+
+# WebStorm specific
+.idea/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Environment specific
+.env
+.env.local
+.env.*.local

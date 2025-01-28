@@ -1,0 +1,47 @@
+type Query {
+    getTradeHistory: [Trade]
+    getSignalAnalysis(payload: SignalPayloadInput!): SignalAnalysis
+}
+
+type Mutation {
+    executeTrade(input: TradeInput!): TradeResult
+}
+
+type Trade {
+    id: ID!
+    symbol: String!
+    direction: String!
+    price: Float!
+    leverage: Int!
+    takeProfit: Float!
+    stopLoss: Float!
+}
+
+type SignalAnalysis {
+    confirmation: String!
+    leverage: Int!
+    takeProfit: Float!
+    stopLoss: Float!
+}
+
+input SignalPayloadInput {
+    strategy: String!
+    direction: String!
+    price: Float!
+    timeframe: String!
+    symbol: String!
+}
+
+input TradeInput {
+    symbol: String!
+    direction: String!
+    price: Float!
+    leverage: Int!
+    takeProfit: Float!
+    stopLoss: Float!
+}
+
+type TradeResult {
+    success: Boolean!
+    message: String!
+}
