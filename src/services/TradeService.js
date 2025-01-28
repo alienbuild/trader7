@@ -3,26 +3,35 @@ const logger = require('../utils/logger');
 
 class TradeService {
     static async executeTrade({ symbol, direction, price, leverage, takeProfit, stopLoss }) {
-        logger.info(`Executing trade: ${direction} ${symbol} at ${price}`);
+        logger.info(`Executing trade: ${direction.toUpperCase()} ${symbol} at price ${price}, leverage: ${leverage}x`);
 
-        const tradePayload = {
-            symbol,
-            direction,
-            price,
-            leverage,
-            takeProfit,
-            stopLoss,
-        };
+        try {
+            const btccClient = new BtccClient();
 
-        // Send trade to BTCC API
-        const btccResponse = await BtccClient.createTrade(tradePayload);
+            // Place the trade order
+            const orderResponse = await btccClient.placeOrder({
+                symbol,
+                price,
+                side: direction.toLowerCase() === 'buy' ? 'buy' : 'sell',
+                leverage,
+                takeProfit,
+                stopLoss,
+                type: 'market',
+            });
 
-        if (btccResponse.success) {
-            logger.info(`Trade executed successfully: ${JSON.stringify(btccResponse)}`);
-            return btccResponse;
-        } else {
-            logger.error(`Failed to execute trade: ${JSON.stringify(btccResponse)}`);
-            throw new Error('Trade execution failed');
+            if (orderResponse && orderResponse.success) {
+                logger.info(`Trade executed successfully: ${JSON.stringify(orderResponse)}`);
+                return {
+                    success: true,
+                    tradeDetails: orderResponse,
+                };
+            } else {
+                logger.error(`Failed to execute trade: ${JSON.stringify(orderResponse)}`);
+                throw new Error('Trade execution failed');
+            }
+        } catch (error) {
+            logger.error(`Error executing trade: ${error.message}`);
+            throw error;
         }
     }
 }
