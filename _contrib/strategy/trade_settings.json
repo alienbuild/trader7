@@ -1,0 +1,25 @@
+{
+  "risk_management": {
+    "conservative": {
+      "risk_percentage": 1,
+      "leverage_range": [50, 100]
+    },
+    "balanced": {
+      "risk_percentage": 2,
+      "leverage_range": [100, 200]
+    },
+    "aggressive": {
+      "risk_percentage": 5,
+      "leverage_range": [200, 500]
+    }
+  },
+  "fees": {
+    "maker_fee": 0.01,
+    "taker_fee": 0.02
+  },
+  "order_execution": {
+    "risk_to_reward": 1.5,
+    "max_slippage": 0.1,
+    "entry_buffer": 0.02
+  }
+}

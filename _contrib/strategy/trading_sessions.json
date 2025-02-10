@@ -1,0 +1,19 @@
+{
+  "sessions": {
+    "London": {
+      "open": "08:00 UTC",
+      "close": "16:00 UTC",
+      "high_volatility": true
+    },
+    "New York": {
+      "open": "13:00 UTC",
+      "close": "21:00 UTC",
+      "high_volatility": true
+    },
+    "Tokyo": {
+      "open": "23:00 UTC",
+      "close": "07:00 UTC",
+      "high_volatility": false
+    }
+  }
+}

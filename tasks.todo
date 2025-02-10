@@ -1,0 +1,43 @@
+Implement BTCC webhook to monitor when trades close and then update our logger with the outcome and pnl
+
+Example: webhooks/btccWebhook.js
+Register webhook in server.js with:
+app.use("/webhook", btccWebhook);
+
+Code:
+const express = require("express");
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
+const router = express.Router();
+
+router.post("/btcc-webhook", async (req, res) => {
+    try {
+        const { symbol, entryPrice, exitPrice, pnl, outcome } = req.body;
+
+        // Find the open trade
+        const trade = await prisma.tradeHistory.findFirst({
+            where: { symbol, exitPrice: null }
+        });
+
+        if (!trade) {
+            return res.status(404).json({ message: "Trade not found or already closed." });
+        }
+
+        // Update trade outcome & PNL
+        await prisma.tradeHistory.update({
+            where: { id: trade.id },
+            data: {
+                exitPrice,
+                pnl,
+                outcome,
+            }
+        });
+
+        res.json({ message: "Trade outcome updated successfully." });
+    } catch (error) {
+        console.error("Error updating trade outcome:", error);
+        res.status(500).json({ message: "Internal server error." });
+    }
+});
+
+module.exports = router;

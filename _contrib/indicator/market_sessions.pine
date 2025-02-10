@@ -59,3 +59,17 @@ else
 // Detect W Formation During London Session
 is_london_session = time(timeframe.period, "0800-1630")
 // is_w_formation_london = f_is_w_formation(high, low) and not na(is_london_session)
+
+// Define Brinks Box Session Timing
+brinks_london_start = timestamp(year, month, day, 7, 0) // 07:00 UTC
+brinks_london_end = timestamp(year, month, day, 8, 0)   // 08:00 UTC
+
+brinks_ny_start = timestamp(year, month, day, 12, 0)    // 12:00 UTC
+brinks_ny_end = timestamp(year, month, day, 13, 0)      // 13:00 UTC
+
+// Mark Brinks Box Range on Chart
+brinks_london_range = time >= brinks_london_start and time < brinks_london_end
+brinks_ny_range = time >= brinks_ny_start and time < brinks_ny_end
+
+bgcolor(brinks_london_range ? color.new(color.blue, 80) : na, title="London Brinks Box")
+bgcolor(brinks_ny_range ? color.new(color.red, 80) : na, title="NY Brinks Box")

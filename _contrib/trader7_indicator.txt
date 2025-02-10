@@ -15,10 +15,18 @@ f_draw_overlay(start_index, end_index, top_level, bottom_level, overlay_color) =
     box.new(left=start_index,top=top_level,right=end_index,bottom=bottom_level,border_color=color.new(overlay_color, 0),bgcolor=color.new(overlay_color, 80))
 
 // Detect W Formation
-f_is_w_formation(_high, _low, _close) =>
-    _low[2] > _low[1] and _low[1] < _low and _high[1] > _high[2] and _high > _high[1] and _close > _close[1]
+f_is_w_formation(_high, _low, _close, _volume) =>
+    // Simple 3-bar logic (small patterns)
+    small_w = _low[2] > _low[1] and _low[1] < _low and _high[1] > _high[2] and _high > _high[1] and _close > _close[1]
 
-is_w_formation = f_is_w_formation(high, low, close)
+    // Multi-bar logic (larger patterns)
+    first_leg_down = _low[5] == ta.lowest(_low, 5)  // Lowest low over last 5 bars
+    midpoint = _high[2] > ta.highest(_high, 3) and _low[2] > _low[5]  // Midpoint consolidation
+    second_leg_down = _low[1] <= _low[5] * 1.02 and _low[1] >= _low[5] * 0.98  // Breach tolerance for second leg
+
+    small_w or (first_leg_down and midpoint and second_leg_down)
+
+is_w_formation = f_is_w_formation(high, low, close, volume)
 
 // Add Labels for W Formation
 if is_w_formation
@@ -29,10 +37,18 @@ if is_w_formation
 // Function to detect M Formation
 
 // Detect M Formation
-f_is_m_formation(_high, _low, _close) =>
-    _high[2] < _high[1] and _high[1] > _high and _low[1] < _low[2] and _low < _low[1] and _close < _close[1]
+f_is_m_formation(_high, _low, _close, _volume) =>
+    // Simple 3-bar logic (small patterns)
+    small_m = _high[2] < _high[1] and _high[1] > _high and _low[1] < _low[2] and _low < _low[1] and _close < _close[1]
 
-is_m_formation = f_is_m_formation(high, low, close)
+    // Multi-bar logic (larger patterns)
+    first_leg_up = _high[5] == ta.highest(_high, 5)  // Highest high over last 5 bars
+    midpoint = _low[2] < ta.lowest(_low, 3) and _high[2] < _high[5]  // Midpoint consolidation
+    second_leg_up = _high[1] >= _high[5] * 0.98 and _high[1] <= _high[5] * 1.02  // Breach tolerance for second leg
+
+    small_m or (first_leg_up and midpoint and second_leg_up)
+
+is_m_formation = f_is_m_formation(high, low, close, volume)
 
 // Add Labels for M Formation
 if is_m_formation

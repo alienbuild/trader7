@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Strategy {
+  id              Int     @id @default(autoincrement())
+  name            String  @unique
+  description     String?
+  entryConditions Json
+  exitConditions  Json
+  alerts          Json
+}
+
+model TradeHistory {
+  id         Int      @id @default(autoincrement())
+  symbol     String
+  strategy   String
+  direction  String
+  entryPrice Float
+  exitPrice  Float?
+  stopLoss   Float
+  takeProfit Float
+  tradeTime  DateTime @default(now())
+  outcome    String?
+  pnl        Float?
+}
+
+model LiquidityZone {
+  id            Int      @id @default(autoincrement())
+  symbol        String
+  highLiquidity Float
+  lowLiquidity  Float
+  fakeoutCount  Int      @default(0)
+  detectedAt    DateTime @default(now())
+}
+
+model MarketSession {
+  id             Int     @id @default(autoincrement())
+  sessionName    String
+  openTime       BigInt
+  closeTime      BigInt
+  highVolatility Boolean @default(false)
+}

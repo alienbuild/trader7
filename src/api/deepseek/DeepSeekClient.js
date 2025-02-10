@@ -6,7 +6,7 @@ class DeepSeekClient {
         const response = await fetch('https://your-deepseek-api-endpoint.com/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload), // The payload now includes the prompt from AlertService
+            body: JSON.stringify(payload),
         });
 
         // Handle response

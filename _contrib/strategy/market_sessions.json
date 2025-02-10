@@ -1,0 +1,17 @@
+{
+  "sessions": {
+    "london_open": {
+      "start": "06:00 UTC",
+      "end": "09:00 UTC"
+    },
+    "new_york_open": {
+      "start": "12:00 UTC",
+      "end": "15:00 UTC"
+    }
+  },
+  "brinks_box": {
+    "formation_time": "07:00 - 08:00 UTC",
+    "validity_duration": "1 hour",
+    "minimum_volume_threshold": "200% avg"
+  }
+}

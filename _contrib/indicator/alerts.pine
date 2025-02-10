@@ -73,3 +73,38 @@ if is_w_formation and is_volume_spike and rsi_value < 70
 if is_m_formation and is_volume_spike and rsi_value > 30
     short_payload = construct_payload("short", "M Formation")
     alert(short_payload, alert.freq_once_per_bar)
+
+// Detect the first 15-minute candle closing above/below the Brinks Box range
+brinks_high = request.security(syminfo.tickerid, "15", ta.highest(high, 4)) // Last 4 bars (1 hour)
+brinks_low = request.security(syminfo.tickerid, "15", ta.lowest(low, 4)) // Last 4 bars (1 hour)
+
+// Detect breakout
+brinks_long_signal = close > brinks_high and ta.crossover(close, brinks_high)
+brinks_short_signal = close < brinks_low and ta.crossunder(close, brinks_low)
+
+// Alert conditions
+alertcondition(brinks_long_signal, title="Brinks Box Long Breakout", message="Brinks Box Long Breakout detected. First 15m candle closed above range.")
+alertcondition(brinks_short_signal, title="Brinks Box Short Breakout", message="Brinks Box Short Breakout detected. First 15m candle closed below range.")
+
+// Send payload when breakout is confirmed
+if brinks_long_signal or brinks_short_signal
+    alert_message = '{"strategy": "Brinks Box", "direction": "' + (brinks_long_signal ? "long" : "short") + '", "price": ' + str.tostring(close) + ', "timeframe": "15m", "symbol": "' + syminfo.tickerid + '", "brinks_high": ' + str.tostring(brinks_high) + ', "brinks_low": ' + str.tostring(brinks_low) + '}'
+    alert(alert_message, alert.freq_once_per_bar_close)
+
+// Detect Liquidity Sweep (Fakeout)
+liq_sweep_high = high > ta.highest(high, 10)[1] and close < high
+liq_sweep_low = low < ta.lowest(low, 10)[1] and close > low
+
+// Alert for liquidity sweeps
+alertcondition(liq_sweep_high, title="Liquidity Sweep (High)", message="Possible fakeout above key level.")
+alertcondition(liq_sweep_low, title="Liquidity Sweep (Low)", message="Possible fakeout below key level.")
+
+// Define market cycle detection logic
+is_level_1 = ta.lowest(low, 20) == low // New low (Level 1)
+is_level_2 = ta.highest(high, 20) == high and close > ta.sma(close, 10) // Mid push (Level 2)
+is_level_3 = ta.highest(high, 50) == high and close < ta.sma(close, 10) // Peak (Level 3)
+
+// Generate cycle alerts
+alertcondition(is_level_1, title="Market Cycle Level 1", message="Level 1 detected. Reversal possible.")
+alertcondition(is_level_2, title="Market Cycle Level 2", message="Level 2 detected. Trend continuation.")
+alertcondition(is_level_3, title="Market Cycle Level 3", message="Level 3 detected. Caution for reversal.")

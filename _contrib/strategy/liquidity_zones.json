@@ -1,0 +1,18 @@
+{
+  "liquidity_zones": [
+    {
+      "symbol": "EUR/USD",
+      "high_liquidity_area": 1.10500,
+      "low_liquidity_area": 1.09500,
+      "fakeout_count": 3,
+      "last_detected": "2024-02-04T12:30:00Z"
+    },
+    {
+      "symbol": "BTC/USD",
+      "high_liquidity_area": 46000,
+      "low_liquidity_area": 45000,
+      "fakeout_count": 5,
+      "last_detected": "2024-02-04T14:00:00Z"
+    }
+  ]
+}

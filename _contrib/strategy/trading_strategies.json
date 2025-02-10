@@ -1,0 +1,37 @@
+{
+  "strategies": [
+    {
+      "name": "Brinks Box",
+      "timeframe": "15m",
+      "entry_conditions": {
+        "confirmation_candle": "First 15-minute candle closes above/below Brinks range",
+        "ema_alignment": "50 EMA must align with breakout direction",
+        "volume_spike": "Volume increase required"
+      },
+      "exit_conditions": {
+        "stop_loss": "Set below Brinks Low (for longs) or above Brinks High (for shorts)",
+        "take_profit": "1:2 Risk-Reward Ratio"
+      },
+      "alerts": ["brinks_box_breakout", "brinks_box_retest"]
+    },
+    {
+      "name": "Market Cycle Levels",
+      "timeframe": "1H",
+      "entry_conditions": {
+        "level_1": "Price creates a new low, forming potential reversal",
+        "level_2": "Mid push continuation, trend strengthening",
+        "level_3": "Peak formation, possible reversal"
+      },
+      "alerts": ["market_cycle_level_1", "market_cycle_level_2", "market_cycle_level_3"]
+    },
+    {
+      "name": "Liquidity Sweeps & Fakeouts",
+      "timeframe": "5m, 15m",
+      "entry_conditions": {
+        "fakeout_high": "Price wicks above resistance but closes below",
+        "fakeout_low": "Price wicks below support but closes above"
+      },
+      "alerts": ["liquidity_sweep_high", "liquidity_sweep_low"]
+    }
+  ]
+}
