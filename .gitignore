@@ -3,6 +3,7 @@ node_modules/
 npm-debug.log
 yarn-error.log
 *.log
+logs/
 
 # WebStorm specific
 .idea/
@@ -15,3 +16,10 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Prisma specific
+prisma/migrations/*
+!prisma/migrations/*.sql
+
+# Contrib
+_contrib/_tr

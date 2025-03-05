@@ -9,6 +9,9 @@ type Mutation {
 
 type Trade {
     id: ID!
+    strategy: String!
+    entry: Float!
+    exit: Float
     symbol: String!
     direction: String!
     price: Float!

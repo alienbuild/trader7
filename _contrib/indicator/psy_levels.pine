@@ -1,33 +1,47 @@
-// Psy Levels
-var int oneWeekMillis = (7 * 24 * 60 * 60 * 1000)
+//@version=5
+indicator("Psychological Levels", overlay=true)
 
-[psyHi, psyLo, psyHiLabel, psyLoLabel, psySessionStartTime] = trLib.calcPsyLevels(oneWeekMillis, showPsylevels, psyType, sydDST)
+// Parameters
+show_major = input.bool(true, "Show Major Levels")
+show_minor = input.bool(true, "Show Minor Levels")
+lookback = input.int(100, "Lookback Period")
 
-// Declare psyHiLine and psyLoLine outside the conditional block
-var line psyHiLine = na
-var line psyLoLine = na
+// Price Rounding Functions
+round_to_major(price) =>
+    math.round(price / 1000) * 1000
 
-// Draw Psy Level Lines
-if (barstate.islast) and not showAllPsy and showPsylevels
-    // Extend line back to the previous start time (after Psy-Hi/Lo have been calculated)
-    psyHiLine := line.new(time, psyHi, psySessionStartTime, psyHi, xloc.bar_time, extend.none, psyColH)
-    line.delete(psyHiLine[1])
-    psyLoLine := line.new(time, psyLo, psySessionStartTime, psyLo, xloc.bar_time, extend.none, psyColL)
-    line.delete(psyLoLine[1])
+round_to_minor(price) =>
+    math.round(price / 100) * 100
 
-// Write Psy Level Labels - same label regardless if line.new or plot used
-trLib.rLabelLastBar(psyHi, psyHiLabel, label.style_none, psyColH, showPsylabel, labelXOffset)
-trLib.rLabelLastBar(psyLo, psyLoLabel, label.style_none, psyColL, showPsylabel, labelXOffset)
+// Level Detection
+var major_levels = array.new_float()
+var minor_levels = array.new_float()
 
-// Plot Historical Psy Level
-plot(showPsy and showPsylevels and showAllPsy ? psyHi : na, color=psyColH, style=plot.style_stepline, linewidth=2, editable=false, title="Psy-Hi")
-plot(showPsy and showPsylevels and showAllPsy ? psyLo : na, color=psyColL, style=plot.style_stepline, linewidth=2, editable=false, title="Psy-Lo")
+if barstate.islast
+    price_range = ta.highest(high, lookback) - ta.lowest(low, lookback)
+    step = price_range / 10
+    
+    for i = 0 to 10
+        level = ta.lowest(low, lookback) + step * i
+        if show_major
+            major = round_to_major(level)
+            array.push(major_levels, major)
+        if show_minor
+            minor = round_to_minor(level)
+            array.push(minor_levels, minor)
 
-alertcondition(ta.crossunder(close,psyHi) and not na(psyHi) and psyHi != 0 , "PA crossed under Psy Hi", "PA has crossed under the Psy Hi")
-alertcondition(ta.crossover(close,psyHi) and not na(psyHi) and psyHi != 0  , "PA crossed over Psy Hi", "PA has crossed over the Psy Hi")
-alertcondition(ta.crossunder(close,psyLo) and not na(psyLo) and psyLo != 0 , "PA crossed under Psy Lo", "PA has crossed under the Psy Lo")
-alertcondition(ta.crossover(close,psyLo) and not na(psyLo) and psyLo != 0  , "PA crossed over Psy Lo", "PA has crossed over the Psy Lo")
+// Level Reaction Detection
+level_reaction(price, level) =>
+    math.abs(price - level) < ta.atr(14) * 0.1
 
-// Detect Psychological Level Alignments
-is_psy_level_w = low[1] == psyLo
-is_psy_level_m = high[1] == psyHi
+// Plot Levels and Reactions
+if barstate.islast
+    for i = 0 to array.size(major_levels) - 1
+        level = array.get(major_levels, i)
+        line.new(bar_index - lookback, level, bar_index, level, 
+             color=color.blue, style=line.style_dashed)
+        
+    for i = 0 to array.size(minor_levels) - 1
+        level = array.get(minor_levels, i)
+        line.new(bar_index - lookback, level, bar_index, level, 
+             color=color.gray, style=line.style_dotted)

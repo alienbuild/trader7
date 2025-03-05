@@ -1,0 +1,116 @@
+//@version=6
+indicator(title = 'Additional Trading Strategies', shorttitle='ADD_STRAT', overlay=true)
+
+import TradersReality/Traders_Reality_Lib/2 as trLib
+
+// =================== Inputs ===================
+// EMA Cross
+ema_50 = ta.ema(close, 50)
+ema_200 = ta.ema(close, 200)
+vol_threshold = ta.sma(volume, 20) * 1.5
+
+// Range Breakout
+range_length = input.int(12, "Range Length")
+range_threshold = input.float(5, "Range Threshold %") / 100
+
+// Volume Profile
+lookback = input.int(100, "Volume Profile Lookback")
+node_threshold = input.float(2, "Volume Node Threshold")
+
+// Market Structure
+struct_lookback = input.int(10, "Structure Lookback")
+
+// =================== Functions ===================
+
+// EMA Cross Strategy
+f_ema_cross() =>
+    cross_long = ta.crossover(close, ema_50) and volume > vol_threshold
+    cross_short = ta.crossunder(close, ema_50) and volume > vol_threshold
+    [cross_long, cross_short]
+
+// Range Breakout Strategy
+f_range_breakout() =>
+    high_range = ta.highest(high[1], range_length)
+    low_range = ta.lowest(low[1], range_length)
+    range_size = (high_range - low_range) / low_range
+    is_consolidation = range_size < range_threshold
+    
+    breakout_long = close > high_range and is_consolidation[1] and volume > ta.sma(volume, 20) * 2
+    breakout_short = close < low_range and is_consolidation[1] and volume > ta.sma(volume, 20) * 2
+    [breakout_long, breakout_short]
+
+// Volume Profile
+f_volume_nodes() =>
+    var float[] volume_prices = array.new_float(0)
+    var float[] volume_amounts = array.new_float(0)
+    
+    if barstate.islast
+        for i = 0 to lookback
+            array.push(volume_prices, close[i])
+            array.push(volume_amounts, volume[i])
+    
+    high_node = array.get(volume_prices, array.indexof(volume_amounts, array.max(volume_amounts)))
+    low_node = array.get(volume_prices, array.indexof(volume_amounts, array.min(volume_amounts)))
+    
+    rejection_high = high > high_node and close < high_node and volume > ta.sma(volume, 20)
+    rejection_low = low < low_node and close > low_node and volume > ta.sma(volume, 20)
+    [rejection_high, rejection_low]
+
+// Market Structure Break
+f_market_structure() =>
+    higher_high = high > ta.highest(high[2], struct_lookback)
+    higher_low = low > ta.lowest(low[2], struct_lookback)
+    lower_high = high < ta.highest(high[2], struct_lookback)
+    lower_low = low < ta.lowest(low[2], struct_lookback)
+    
+    break_long = lower_low[1] and higher_low and volume < ta.sma(volume, 20)
+    break_short = higher_high[1] and lower_high and volume < ta.sma(volume, 20)
+    [break_long, break_short]
+
+// =================== Strategy Logic ===================
+[ema_long, ema_short] = f_ema_cross()
+[range_long, range_short] = f_range_breakout()
+[vol_reject_high, vol_reject_low] = f_volume_nodes()
+[struct_long, struct_short] = f_market_structure()
+
+// =================== Plotting ===================
+// EMA Lines
+plot(ema_50, "50 EMA", color=color.blue)
+plot(ema_200, "200 EMA", color=color.red)
+
+// Range Boxes
+var box range_box = na
+if range_long or range_short
+    box.delete(range_box[1])
+    range_box := box.new(left=bar_index - range_length, right=bar_index, 
+                        top=ta.highest(high, range_length), bottom=ta.lowest(low, range_length),
+                        bgcolor=color.new(color.blue, 90))
+
+// Volume Nodes
+plot(high_node, "High Volume Node", color=color.purple, style=plot.style_circles)
+plot(low_node, "Low Volume Node", color=color.orange, style=plot.style_circles)
+
+// =================== Alerts ===================
+// EMA Cross
+alertcondition(ema_long, "EMA Cross Long", "Price crossed above 50 EMA with volume confirmation")
+alertcondition(ema_short, "EMA Cross Short", "Price crossed below 50 EMA with volume confirmation")
+
+// Range Breakout
+alertcondition(range_long, "Range Breakout Long", "Bullish breakout from consolidation")
+alertcondition(range_short, "Range Breakout Short", "Bearish breakout from consolidation")
+
+// Volume Node Rejection
+alertcondition(vol_reject_high, "Volume Node Rejection High", "Rejection from high volume node")
+alertcondition(vol_reject_low, "Volume Node Rejection Low", "Rejection from low volume node")
+
+// Market Structure Break
+alertcondition(struct_long, "Structure Break Long", "Bullish market structure break")
+alertcondition(struct_short, "Structure Break Short", "Bearish market structure break")
+
+// =================== Alert Message Template ===================
+// {{strategy.order.alert_message}}
+// Symbol: {{ticker}}, Timeframe: {{interval}}
+// Price: {{close}}
+// Volume: {{volume}}
+// EMA50: {{plot("50 EMA")}}
+// EMA200: {{plot("200 EMA")}}

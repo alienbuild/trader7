@@ -1,0 +1,42 @@
+//@version=5
+indicator("Liquidity Sweeps Detection", overlay=true)
+
+// Parameters
+lookback = input.int(10, "Lookback Period")
+volume_threshold = input.float(1.5, "Volume Threshold Multiplier")
+sweep_threshold = input.float(0.2, "Sweep Distance (% of ATR)")
+
+// Technical Indicators
+atr = ta.atr(14)
+avg_volume = ta.sma(volume, lookback)
+
+// Sweep Detection
+bull_sweep = low < ta.lowest(low[1], lookback) and close > ta.lowest(low[1], lookback) and 
+    volume > avg_volume * volume_threshold and 
+    (high - low) > atr * sweep_threshold
+
+bear_sweep = high > ta.highest(high[1], lookback) and close < ta.highest(high[1], lookback) and 
+    volume > avg_volume * volume_threshold and 
+    (high - low) > atr * sweep_threshold
+
+// Liquidity Levels
+struct LiquidityLevel {
+    float price
+    float volume
+    int age
+    bool active
+}
+
+var bull_levels = array.new<LiquidityLevel>()
+var bear_levels = array.new<LiquidityLevel>()
+
+// Update Liquidity Levels
+if bull_sweep
+    array.push(bull_levels, LiquidityLevel.new(low, volume, bar_index, true))
+
+if bear_sweep
+    array.push(bear_levels, LiquidityLevel.new(high, volume, bar_index, true))
+
+// Plot Sweeps
+plotshape(bull_sweep, "Bullish Sweep", shape.triangleup, location.belowbar, color.green, size=size.small)
+plotshape(bear_sweep, "Bearish Sweep", shape.triangledown, location.abovebar, color.red, size=size.small)

@@ -5,8 +5,8 @@ const prisma = new PrismaClient();
 async function updateMarketSessions() {
     const updatedSessions = [
         { sessionName: "London", openTime: 1700, closeTime: 2500 },
-        { sessionName: "New York", openTime: 2200, closeTime: 0600 },
-        { sessionName: "Tokyo", openTime: 0000, closeTime: 0800 }
+        { sessionName: "New York", openTime: 2200, closeTime: 600 },
+        { sessionName: "Tokyo", openTime: 0, closeTime: 800 }
     ];
 
     for (const session of updatedSessions) {

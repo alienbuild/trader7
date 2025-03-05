@@ -1,41 +1,45 @@
-// vector_candles.pine
+//@version=5
+indicator("Vector Candle Detection", overlay=true)
 
-// Vector Candle Zones Configuration
-int zonesMax = input.int(500, 'Maximum zones to draw', group='Vector Candle Zones', inline="vczOn")
-string zoneType = input.string(group='Vector Candle Zones', defval='Body only', title='Zone top/bottom is defined with: ', options=['Body only', 'Body with wicks'])
-string zoneUpdateType = input.string(group='Vector Candle Zones', defval='Body with wicks', title='Zones are cleared using candle: ', options=['Body only', 'Body with wicks'])
-int borderWidth = input.int(0, 'Zone border width', group='Vector Candle Zones')
-bool colorOverride = input.bool(true, 'Override color?', group='Vector Candle Zones', inline="vcz1")
-color zoneColor = input.color(title='Color', group='Vector Candle Zones', defval=color.rgb(255, 230, 75, 90), inline="vcz1", tooltip='The vector candle zones color to use if you do not want to use the PVSRA Candle Colors.')
-int transperancy = input.int(90, 'Zone Transparency', minval=0, maxval=100, group='Vector Candle Zones', tooltip='If the vector candle zones color is not overridden, then we want to set the transparency of the vector candle colors as defined by the PBSRA candle colors. This setting only affects the candle zone colors, not the candle colors themselves.')
+// Parameters
+climax_volume_threshold = input.float(2.0, "Climax Volume Threshold")
+trend_volume_threshold = input.float(1.5, "Trend Volume Threshold")
+volume_ma_length = input.int(10, "Volume MA Length")
 
-// Vector Candle Zones Logic
-var zoneBoxesAbove = array.new_box()
-var zoneBoxesBelow = array.new_box()
+// Volume Analysis
+avg_volume = ta.sma(volume, volume_ma_length)
+is_high_volume = volume >= avg_volume * climax_volume_threshold
+is_trend_volume = volume >= avg_volume * trend_volume_threshold
 
-[pvsraVolume, pvsraHigh, pvsraLow, pvsraClose, pvsraOpen] = pvsraVolume(overrideSym, pvsraSym, syminfo.tickerid)
+// Candle Analysis
+body_size = math.abs(close - open)
+upper_wick = high - math.max(open, close)
+lower_wick = math.min(open, close) - low
+total_range = high - low
 
-// Calculate PVSRA color and other metrics
-[pvsraColor, alertFlag, averageVolume, volumeSpread, highestVolumeSpread] = trLib.calcPvsra(pvsraVolume, pvsraHigh, pvsraLow, pvsraClose, pvsraOpen, redVectorColor, greenVectorColor, violetVectorColor, blueVectorColor, regularCandleDownColor, regularCandleUpColor)
-barcolor(pvsraColor)
+// Vector Candle Types
+climax_up = is_high_volume and close > open and lower_wick < body_size * 0.3
+climax_down = is_high_volume and close < open and upper_wick < body_size * 0.3
+trend_up = is_trend_volume and close > open and body_size > total_range * 0.6
+trend_down = is_trend_volume and close < open and body_size > total_range * 0.6
 
-if showVCZ
+// Stopping Volume
+stopping_volume = is_high_volume and 
+    ((close < open and lower_wick > body_size) or 
+     (close > open and upper_wick > body_size))
 
-    // Get PVSRA flag
-    pvsraFlag = trLib.getPvsraFlagByColor(pvsraColor, redVectorColor, greenVectorColor, violetVectorColor, blueVectorColor, regularCandleUpColor)
+// Color Coding
+vector_color = if climax_up
+    color.rgb(0, 255, 0, 80)
+else if climax_down
+    color.rgb(255, 0, 0, 80)
+else if trend_up
+    color.rgb(0, 150, 0, 80)
+else if trend_down
+    color.rgb(150, 0, 0, 80)
+else if stopping_volume
+    color.rgb(255, 255, 0, 80)
+else
+    color.rgb(100, 100, 100, 80)
 
-    // Update zones above and below the price
-    trLib.updateZones(pvsraFlag, 0, zoneBoxesBelow, zonesMax, pvsraHigh, pvsraLow, pvsraOpen, pvsraClose, transperancy, zoneUpdateType, zoneColor, zoneType, borderWidth, colorOverride, redVectorColor, greenVectorColor, violetVectorColor, blueVectorColor)
-    trLib.updateZones(pvsraFlag, 1, zoneBoxesAbove, zonesMax, pvsraHigh, pvsraLow, pvsraOpen, pvsraClose, transperancy, zoneUpdateType, zoneColor, zoneType, borderWidth, colorOverride, redVectorColor, greenVectorColor, violetVectorColor, blueVectorColor)
-
-    // Clean up the arrays
-    trLib.cleanarr(zoneBoxesAbove)
-    trLib.cleanarr(zoneBoxesBelow)
-
-// Detect High-Volume Vector Candles
-is_green_vector = volume > ta.sma(volume, 14) * volume_multiplier and close > open
-is_red_vector = volume > ta.sma(volume, 14) * volume_multiplier and close < open
-
-// Detect Vector Candle Patterns
-is_vector_long_setup = is_green_vector and close > ema_50
-is_vector_short_setup = is_red_vector and close < ema_50
+plotcandle(open, high, low, close, "Vector Candles", vector_color)

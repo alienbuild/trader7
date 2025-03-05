@@ -8,12 +8,17 @@ datasource db {
 }
 
 model Strategy {
-  id              Int     @id @default(autoincrement())
-  name            String  @unique
-  description     String?
+  id              String   @id @default(uuid())
+  name            String   @unique
+  description     String
+  timeframes      String[]
   entryConditions Json
   exitConditions  Json
+  riskParameters  Json
   alerts          Json
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model TradeHistory {
@@ -40,9 +45,81 @@ model LiquidityZone {
 }
 
 model MarketSession {
-  id             Int     @id @default(autoincrement())
-  sessionName    String
-  openTime       BigInt
-  closeTime      BigInt
-  highVolatility Boolean @default(false)
+  id          String   @id @default(uuid())
+  sessionName String   @unique
+  openTime    Int
+  closeTime   Int
+  timeZone    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Trade {
+  id                String             @id @default(uuid())
+  strategyName      String
+  symbol            String
+  direction         String
+  entryPrice        Float
+  stopLoss          Float
+  takeProfit        Float
+  quantity          Float
+  status            String
+  marketPhase       String
+  sessionName       String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  patternDetections PatternDetection[]
+  MarketCondition   MarketCondition[]
+}
+
+enum PatternType {
+  LIQUIDITY_SWEEP
+  VECTOR_CANDLE
+  W_FORMATION
+  M_FORMATION
+}
+
+model PatternDetection {
+  id          String      @id @default(uuid())
+  tradeId     String
+  patternType PatternType
+  confidence  Float
+  timeframe   String
+  price       Float
+  volume      Float
+  confirmed   Boolean
+  createdAt   DateTime    @default(now())
+  trade       Trade       @relation(fields: [tradeId], references: [id])
+}
+
+model MarketCondition {
+  id              String   @id @default(uuid())
+  tradeId         String
+  adrExhaustion   Json
+  psychLevels     Json
+  marketStructure Json
+  createdAt       DateTime @default(now())
+  trade           Trade    @relation(fields: [tradeId], references: [id])
+}
+
+model MarketData {
+  id        String   @id @default(uuid())
+  symbol    String
+  timeframe String
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float
+  timestamp DateTime
+  createdAt DateTime @default(now())
+}
+
+model TradingSession {
+  id        String  @id @default(uuid())
+  name      String
+  startTime String
+  endTime   String
+  isActive  Boolean @default(true)
 }

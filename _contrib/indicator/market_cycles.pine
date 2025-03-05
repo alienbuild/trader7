@@ -1,0 +1,22 @@
+// Market Structure Phases
+//@version=5
+indicator("Market Structure Phases", overlay=true)
+
+// Phase Detection
+phase1_condition = ta.crossover(close, ema_50) and ema_50 > ema_200
+phase2_condition = close > ema_50 and ema_50 > ema_200 and ta.change(close) > ta.atr(14)
+phase3_condition = ta.crossunder(close, ema_50) and volume > ta.sma(volume, 20) * 2
+
+// Market Structure
+struct_high = ta.highest(high, 10)
+struct_low = ta.lowest(low, 10)
+
+// Level Detection
+level1 = struct_low + (struct_high - struct_low) * 0.236
+level2 = struct_low + (struct_high - struct_low) * 0.382
+level3 = struct_low + (struct_high - struct_low) * 0.618
+
+// Plot Levels
+plot(level1, "Level 1", color=color.blue)
+plot(level2, "Level 2", color=color.yellow)
+plot(level3, "Level 3", color=color.red)

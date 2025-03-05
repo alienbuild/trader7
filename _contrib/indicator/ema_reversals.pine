@@ -1,0 +1,35 @@
+//@version=5
+indicator("EMA Reversal Patterns", overlay=true)
+
+// EMA Parameters
+ema_fast = input.int(50, "Fast EMA")
+ema_med = input.int(200, "Medium EMA")
+ema_slow = input.int(800, "Slow EMA")
+
+// Calculate EMAs
+ema50 = ta.ema(close, ema_fast)
+ema200 = ta.ema(close, ema_med)
+ema800 = ta.ema(close, ema_slow)
+
+// Reversal Pattern Detection
+bullish_alignment = ema50 > ema200 and ema200 > ema800
+bearish_alignment = ema50 < ema200 and ema200 < ema800
+
+// EMA Crossovers
+bull_cross_50_200 = ta.crossover(ema50, ema200)
+bear_cross_50_200 = ta.crossunder(ema50, ema200)
+bull_cross_200_800 = ta.crossover(ema200, ema800)
+bear_cross_200_800 = ta.crossunder(ema200, ema800)
+
+// Reversal Confirmation
+bull_reversal = bull_cross_50_200 and close > ema50 and volume > ta.sma(volume, 20) * 1.5
+bear_reversal = bear_cross_50_200 and close < ema50 and volume > ta.sma(volume, 20) * 1.5
+
+// Plot EMAs
+plot(ema50, "EMA 50", color.blue)
+plot(ema200, "EMA 200", color.yellow)
+plot(ema800, "EMA 800", color.red)
+
+// Plot Reversal Signals
+plotshape(bull_reversal, "Bullish Reversal", shape.triangleup, location.belowbar, color.green)
+plotshape(bear_reversal, "Bearish Reversal", shape.triangledown, location.abovebar, color.red)

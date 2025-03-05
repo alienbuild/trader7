@@ -1,0 +1,33 @@
+//@version=5
+indicator("W/M Formation Detection", overlay=true)
+
+// Parameters
+swing_threshold = input.float(0.5, "Swing Point Threshold (% of ATR)")
+volume_threshold = input.float(1.3, "Volume Threshold")
+confirmation_bars = input.int(3, "Confirmation Bars")
+
+// Technical Indicators
+atr = ta.atr(14)
+avg_volume = ta.sma(volume, 20)
+
+// W Formation Detection
+w_left_low = low[4] < low[5] and low[4] < low[3]
+w_middle_high = high[3] > high[4] and high[3] > high[2]
+w_right_low = low[2] < low[3] and low[2] < low[1]
+w_breakout = high[1] > high[2] and high[0] > high[1]
+w_volume_confirm = volume > avg_volume * volume_threshold
+
+w_formation = w_left_low and w_middle_high and w_right_low and w_breakout and w_volume_confirm
+
+// M Formation Detection
+m_left_high = high[4] > high[5] and high[4] > high[3]
+m_middle_low = low[3] < low[4] and low[3] < low[2]
+m_right_high = high[2] > high[3] and high[2] > high[1]
+m_breakdown = low[1] < low[2] and low[0] < low[1]
+m_volume_confirm = volume > avg_volume * volume_threshold
+
+m_formation = m_left_high and m_middle_low and m_right_high and m_breakdown and m_volume_confirm
+
+// Plot Formations
+plotshape(w_formation, "W Formation", shape.triangleup, location.belowbar, color.green, size=size.normal)
+plotshape(m_formation, "M Formation", shape.triangledown, location.abovebar, color.red, size=size.normal)
