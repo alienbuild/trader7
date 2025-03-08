@@ -75,7 +75,8 @@ class BacktestService {
 
                 // Process alert through the actual AlertService
                 try {
-                    const result = await AlertService.handleAlert(alert);
+                    const alertService = new AlertService();
+                    const result = await alertService.processAlert(alert);  // Changed from handleAlert to processAlert
                     if (result && result.success) {
                         this.recordTrade({
                             strategy,

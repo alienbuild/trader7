@@ -1,15 +1,20 @@
-const BtccClient = require("../api/btcc/BTCCClient");
+const { btccClient } = require("../lib/btcc");
 const logger = require("../utils/logger");
 const { PrismaClient } = require("@prisma/client");
 const RiskManager = require("./RiskManager");
 const SessionManager = require("./SessionManager");
 const { getLiquidityZones } = require("../utils/liquidityZones");
-const {TradeError} = require("../utils/errorHandler");
+const { TradeError } = require("../utils/errorHandler");
+const { NewsEventService } = require('./NewsEventService');
 
 const prisma = new PrismaClient();
-const btccClient = new BtccClient();
 
 class TradeService {
+    constructor() {
+        this.newsEventService = new NewsEventService();
+        this.sessionManager = new SessionManager();
+    }
+
     static async calculateActualPositionSize(quantity, price, leverage) {
         // Calculate fees impact on position size
         const { totalFee } = await btccClient.calculateFees({ quantity, price, leverage });
@@ -20,253 +25,499 @@ class TradeService {
         return Math.floor(adjustedQuantity);
     }
 
-    static async executeTrade(signal) {
-        // Add pre-trade validations
-        if (!this.validatePreTradeConditions(signal)) {
-            throw new TradeError('Pre-trade conditions not met', 'INVALID_CONDITIONS');
+    async validateTradeConditions(symbol, strategy) {
+        // Check market type and session
+        const marketType = this._getMarketType(symbol);
+        const sessionStatus = await this.sessionManager.getCurrentSession(marketType);
+        
+        if (marketType === 'NASDAQ' && !sessionStatus.canTrade) {
+            throw new Error(`Trading not allowed during ${sessionStatus.currentSession}`);
         }
 
-        // Add position sizing check
-        const positionSize = await RiskManager.calculatePositionSize(signal);
-        if (!positionSize) {
-            throw new TradeError('Invalid position size', 'INVALID_POSITION_SIZE');
+        // Check for blocking news/events
+        const newsStatus = await this.newsEventService.updateAlertService(marketType);
+        
+        if (!newsStatus.canTrade) {
+            throw new Error('Trading blocked due to high-impact news/events');
         }
 
-        // Add duplicate trade check
-        if (await this.isDuplicateTrade(signal)) {
-            throw new TradeError('Duplicate trade detected', 'DUPLICATE_TRADE');
-        }
+        // Adjust risk parameters based on session and news
+        const sessionAdjustment = this._getSessionAdjustment(sessionStatus);
+        const newsAdjustment = newsStatus.modifiedRiskParams;
+        
+        return {
+            canTrade: true,
+            adjustedParameters: {
+                positionSize: strategy.positionSize * sessionAdjustment * newsAdjustment.sizeFactor,
+                stopLoss: strategy.stopLoss * newsAdjustment.slFactor,
+                takeProfit: strategy.takeProfit * newsAdjustment.tpFactor,
+                leverage: this._adjustLeverageForSession(strategy.leverage, sessionStatus)
+            }
+        };
+    }
 
-        // Add session time validation
-        const activeSessions = SessionManager.getCurrentSessions();
-        if (activeSessions.length === 0) {
-            throw new TradeError('Outside trading session hours', 'INVALID_SESSION');
+    _getMarketType(symbol) {
+        if (symbol.includes('-USD') || symbol.includes('/USD')) {
+            return 'CRYPTO';
         }
+        return 'NASDAQ';
+    }
 
-        logger.info(`Executing trade: ${signal.direction.toUpperCase()} ${signal.symbol}, Leverage: ${signal.leverage}x`);
+    _getSessionAdjustment(sessionStatus) {
+        switch (sessionStatus.currentSession) {
+            case 'PRE_MARKET':
+                return 0.5;
+            case 'AFTER_HOURS':
+                return 0.75;
+            default:
+                return 1.0;
+        }
+    }
+
+    _adjustLeverageForSession(leverage, sessionStatus) {
+        if (sessionStatus.currentSession !== 'REGULAR') {
+            return Math.min(leverage, 2); // Reduce leverage in non-regular sessions
+        }
+        return leverage;
+    }
+
+    async executeTrade(tradeParams) {
+        const marketType = this._getMarketType(tradeParams.symbol);
+        
+        // Validate market conditions
+        await this._validateMarketConditions(marketType, tradeParams);
+
+        // Get adjusted parameters based on market type and session
+        const adjustedParams = await this._getAdjustedParameters(tradeParams);
 
         try {
-            // Use WebSocket live price if available, otherwise get market price
-            const price = btccClient.latestPrice || await btccClient.getMarketPrice();
-
-            // Check liquidity zones before trade execution
-            const liquidityZones = await getLiquidityZones(signal.symbol);
-            
-            // Validate trade against liquidity zones
-            if (signal.direction === "buy" && price > liquidityZones.highLiquidity) {
-                throw new Error("Price above major liquidity zone - avoiding chase");
-            }
-            if (signal.direction === "sell" && price < liquidityZones.lowLiquidity) {
-                throw new Error("Price below major liquidity zone - avoiding chase");
-            }
-
-            // Analyze order book before trade execution
-            const orderBook = await btccClient.getOrderBook(signal.symbol);
-            
-            // Calculate buy/sell pressure
-            const buyPressure = orderBook.bids.reduce((sum, [_, volume]) => sum + volume, 0);
-            const sellPressure = orderBook.asks.reduce((sum, [_, volume]) => sum + volume, 0);
-            
-            // Don't trade against strong market pressure
-            if (signal.direction === "buy" && sellPressure > buyPressure * 1.5) {
-                throw new Error("High sell pressure detected - avoiding counter-trend trade");
-            }
-            if (signal.direction === "sell" && buyPressure > sellPressure * 1.5) {
-                throw new Error("High buy pressure detected - avoiding counter-trend trade");
-            }
-
-            let stopLossDistance, takeProfitDistance;
-
-            // Stop-Loss & Take-Profit Calculation
-            if (signal.strategy === "Brinks Box") {
-                stopLossDistance = Math.abs(price - (signal.direction === "buy" ? signal.brinks_low : signal.brinks_high));
-                takeProfitDistance = stopLossDistance * 2;
-            } else {
-                stopLossDistance = signal.atr * 1.5;
-                takeProfitDistance = stopLossDistance * 2;
-            }
-
-            const stopLoss = signal.direction === "buy" ? price - stopLossDistance : price + stopLossDistance;
-            const takeProfit = signal.direction === "buy" ? price + takeProfitDistance : price - takeProfitDistance;
-
-            logger.info(`Trade Parameters -> SL: ${stopLoss}, TP: ${takeProfit}, Strategy: ${signal.strategy}`);
-
-            // Pre-trade validation
-            const activeSessions = SessionManager.getCurrentSessions();
-            if (activeSessions.length === 0) {
-                throw new Error("No active trading session");
-            }
-
-            // Validate strategy-specific conditions
-            if (signal.strategy === "Brinks Box") {
-                const brinksTime = SessionManager.getBrinksBoxTiming();
-                if (!this.isValidBrinksTime(brinksTime)) {
-                    throw new Error("Invalid Brinks Box trading time");
-                }
-            }
-
-            // Adjust leverage based on volatility
-            const adjustedLeverage = RiskManager.adjustLeverageForVolatility(signal.leverage, signal.atr, price);
-
-            // Calculate position size
-            const balanceResponse = await btccClient.getBalance();
-            const accountBalance = balanceResponse.data?.availableBalance || 0;
-            
-            if (!accountBalance) {
-                throw new TradeError('Unable to fetch available balance', 'BALANCE_ERROR');
-            }
-            const positionSize = RiskManager.calculatePositionSize(
-                accountBalance,
-                2, // Assuming 2% risk profile
-                Math.abs(price - stopLoss)
-            );
-
-            // Adjust position size accounting for fees
-            const adjustedPositionSize = await this.calculateActualPositionSize(
-                positionSize,
-                price,
-                adjustedLeverage
-            );
-
-            // Execute trade
-            const orderResponse = await btccClient.placeOrder({
-                symbol: signal.symbol,
-                price,
-                quantity: adjustedPositionSize,
-                side: signal.direction.toLowerCase() === "buy" ? "buy" : "sell",
-                leverage: adjustedLeverage,
-                type: "market",
+            // Execute the trade with adjusted parameters
+            const orderResult = await btccClient.placeOrder({
+                ...adjustedParams,
+                marketType
             });
 
-            if (orderResponse && orderResponse.success) {
-                logger.info(` Trade executed successfully: ${JSON.stringify(orderResponse)}`);
-
-                // Log trade in database for AI training
-                await this.logTrade({
-                    symbol: signal.symbol,
-                    strategy: signal.strategy,
-                    direction: signal.direction,
-                    entryPrice: price,
-                    stopLoss,
-                    takeProfit,
-                    positionSize: adjustedPositionSize,
-                    leverage: adjustedLeverage,
-                });
-
-                return { success: true, tradeDetails: orderResponse };
-            } else {
-                logger.error(`❌ Failed to execute trade: ${JSON.stringify(orderResponse)}`);
-                throw new Error("Trade execution failed");
-            }
+            await this._logTradeExecution(orderResult);
+            return orderResult;
 
         } catch (error) {
-            logger.error(`❌ Error executing trade: ${error.message}`);
+            logger.error(`Trade execution failed: ${error.message}`);
+            throw new TradeError(error.message, 'EXECUTION_ERROR');
+        }
+    }
+
+    async _validateMarketConditions(marketType, tradeParams) {
+        if (marketType === 'NASDAQ') {
+            // Check market internals
+            const internals = await this._getMarketInternals();
+            if (!this._validateMarketInternals(internals, tradeParams.direction)) {
+                throw new TradeError('Market internals not favorable', 'MARKET_CONDITIONS');
+            }
+
+            // Check for opening/closing periods
+            const session = await this.sessionManager.getCurrentSession(marketType);
+            if (session.isTransitionPeriod) {
+                throw new TradeError('Avoiding market open/close period', 'SESSION_TRANSITION');
+            }
+        }
+    }
+
+    async _getAdjustedParameters(tradeParams) {
+        const { symbol, size, direction, leverage } = tradeParams;
+        
+        // Get liquidity zones for position sizing
+        const liquidityZones = await getLiquidityZones(symbol);
+        
+        // Calculate position size based on liquidity
+        const adjustedSize = this._adjustPositionForLiquidity(size, liquidityZones);
+        
+        // Get current market price
+        const currentPrice = await btccClient.getCurrentPrice(symbol);
+        
+        // Calculate actual position size accounting for fees
+        const actualSize = await TradeService.calculateActualPositionSize(
+            adjustedSize,
+            currentPrice,
+            leverage
+        );
+
+        return {
+            ...tradeParams,
+            size: actualSize,
+            price: currentPrice,
+            timestamp: Date.now()
+        };
+    }
+
+    _adjustPositionForLiquidity(size, liquidityZones) {
+        if (!liquidityZones || !liquidityZones.length) {
+            return size;
+        }
+
+        const nearestZone = this._findNearestLiquidityZone(liquidityZones);
+        
+        // Reduce position size if near fake-out prone zones
+        if (nearestZone.fakeoutCount > 3) {
+            return size * 0.75;
+        }
+        
+        // Increase size if in high liquidity zone
+        if (nearestZone.highLiquidity) {
+            return size * 1.25;
+        }
+
+        return size;
+    }
+
+    async _getMarketInternals() {
+        try {
+            return {
+                tick: await btccClient.getMarketData('$TICK.X'),
+                add: await btccClient.getMarketData('$ADD.X'),
+                trin: await btccClient.getMarketData('$TRIN.X'),
+                vix: await btccClient.getMarketData('$VIX.X')
+            };
+        } catch (error) {
+            logger.error(`Failed to fetch market internals: ${error.message}`);
+            return null;
+        }
+    }
+
+    _validateMarketInternals(internals, direction) {
+        if (!internals) return true; // Skip validation if data unavailable
+
+        if (direction === 'buy') {
+            return (
+                internals.tick > 400 &&
+                internals.add > 1000 &&
+                internals.trin < 1.2 &&
+                !this._isVixSpiking(internals.vix)
+            );
+        } else {
+            return (
+                internals.tick < -400 &&
+                internals.add < -1000 &&
+                internals.trin > 1.2 &&
+                this._isVixSpiking(internals.vix)
+            );
+        }
+    }
+
+    _isVixSpiking(vixData) {
+        return vixData.percentageChange > 5;
+    }
+
+    async _findNearestLiquidityZone(liquidityZones) {
+        const currentPrice = await btccClient.getMarketPrice();
+        
+        return liquidityZones.reduce((nearest, zone) => {
+            const currentDiff = Math.abs(currentPrice - zone.price);
+            const nearestDiff = Math.abs(currentPrice - nearest.price);
+            return currentDiff < nearestDiff ? zone : nearest;
+        });
+    }
+
+    async _logTradeExecution(orderResult) {
+        try {
+            await prisma.tradeExecution.create({
+                data: {
+                    orderId: orderResult.orderId,
+                    symbol: orderResult.symbol,
+                    direction: orderResult.direction,
+                    size: orderResult.size,
+                    price: orderResult.price,
+                    leverage: orderResult.leverage,
+                    timestamp: new Date(),
+                    status: orderResult.status,
+                    marketType: this._getMarketType(orderResult.symbol)
+                }
+            });
+        } catch (error) {
+            logger.error(`Failed to log trade execution: ${error.message}`);
+            // Don't throw error as this is non-critical
+        }
+    }
+
+    async modifyActivePosition(positionId, modifications) {
+        try {
+            // Validate modifications
+            await this._validatePositionModification(positionId, modifications);
+
+            // Apply changes
+            const result = await btccClient.modifyPosition(positionId, modifications);
+
+            // Log modification
+            await prisma.positionModification.create({
+                data: {
+                    positionId,
+                    ...modifications,
+                    timestamp: new Date()
+                }
+            });
+
+            return result;
+        } catch (error) {
+            logger.error(`Failed to modify position: ${error.message}`);
+            throw new TradeError(error.message, 'MODIFICATION_ERROR');
+        }
+    }
+
+    async _validatePositionModification(positionId, modifications) {
+        const position = await prisma.position.findUnique({ 
+            where: { id: positionId } 
+        });
+        
+        if (!position) {
+            throw new TradeError('Position not found', 'INVALID_POSITION');
+        }
+
+        // Validate modification parameters
+        if (modifications.stopLoss) {
+            await this._validateStopLoss(position, modifications.stopLoss);
+        }
+
+        if (modifications.takeProfit) {
+            await this._validateTakeProfit(position, modifications.takeProfit);
+        }
+
+        if (modifications.size) {
+            await this._validatePositionSize(position, modifications.size);
+        }
+    }
+
+    async _validateStopLoss(position, newStopLoss) {
+        const currentPrice = await btccClient.getCurrentPrice(position.symbol);
+        const minDistance = currentPrice * 0.01; // 1% minimum distance
+
+        if (position.direction === 'buy' && 
+            (newStopLoss > currentPrice || currentPrice - newStopLoss < minDistance)) {
+            throw new TradeError('Invalid stop loss placement for long position', 'INVALID_SL');
+        }
+
+        if (position.direction === 'sell' && 
+            (newStopLoss < currentPrice || newStopLoss - currentPrice < minDistance)) {
+            throw new TradeError('Invalid stop loss placement for short position', 'INVALID_SL');
+        }
+    }
+
+    async _validateTakeProfit(position, newTakeProfit) {
+        const currentPrice = await btccClient.getCurrentPrice(position.symbol);
+        const minDistance = currentPrice * 0.01; // 1% minimum distance
+
+        if (position.direction === 'buy' && 
+            (newTakeProfit < currentPrice || newTakeProfit - currentPrice < minDistance)) {
+            throw new TradeError('Invalid take profit placement for long position', 'INVALID_TP');
+        }
+
+        if (position.direction === 'sell' && 
+            (newTakeProfit > currentPrice || currentPrice - newTakeProfit < minDistance)) {
+            throw new TradeError('Invalid take profit placement for short position', 'INVALID_TP');
+        }
+    }
+
+    async _validatePositionSize(position, newSize) {
+        const currentPrice = await btccClient.getCurrentPrice(position.symbol);
+        const minSize = position.size * 0.5; // Minimum size is 50% of original position
+        const maxSize = position.size * 2; // Maximum size is 200% of original position
+
+        if (newSize < minSize) {
+            throw new TradeError('New position size is too small', 'INVALID_SIZE');
+        }
+
+        if (newSize > maxSize) {
+            throw new TradeError('New position size is too large', 'INVALID_SIZE');
+        }
+    }
+
+    async closePosition(positionId, closeParams = {}) {
+        try {
+            const position = await prisma.position.findUnique({
+                where: { id: positionId }
+            });
+
+            if (!position) {
+                throw new TradeError('Position not found', 'INVALID_POSITION');
+            }
+
+            const result = await btccClient.closePosition(positionId, closeParams);
+
+            await prisma.positionClose.create({
+                data: {
+                    positionId,
+                    closePrice: result.price,
+                    pnl: result.pnl,
+                    timestamp: new Date(),
+                    reason: closeParams.reason || 'MANUAL_CLOSE'
+                }
+            });
+
+            return result;
+        } catch (error) {
+            logger.error(`Failed to close position: ${error.message}`);
+            throw new TradeError(error.message, 'CLOSE_POSITION_ERROR');
+        }
+    }
+
+    async getPositionHistory(filters = {}) {
+        try {
+            const positions = await prisma.position.findMany({
+                where: filters,
+                include: {
+                    modifications: true,
+                    close: true
+                },
+                orderBy: {
+                    timestamp: 'desc'
+                }
+            });
+
+            return positions.map(position => ({
+                ...position,
+                metrics: this._calculatePositionMetrics(position)
+            }));
+        } catch (error) {
+            logger.error(`Failed to fetch position history: ${error.message}`);
+            throw new TradeError(error.message, 'FETCH_HISTORY_ERROR');
+        }
+    }
+
+    _calculatePositionMetrics(position) {
+        const holdingTime = position.close 
+            ? position.close.timestamp - position.timestamp 
+            : Date.now() - position.timestamp;
+
+        const roi = position.close 
+            ? (position.close.pnl / position.initialMargin) * 100 
+            : 0;
+
+        return {
+            holdingTimeHours: holdingTime / (1000 * 60 * 60),
+            roi,
+            modifications: position.modifications.length,
+            finalLeverage: position.modifications.length > 0 
+                ? position.modifications[position.modifications.length - 1].leverage 
+                : position.leverage
+        };
+    }
+
+    async getTradeStatistics(timeframe = '24h') {
+        try {
+            const startTime = this._calculateStartTime(timeframe);
+            
+            const trades = await prisma.tradeExecution.findMany({
+                where: {
+                    timestamp: {
+                        gte: startTime
+                    }
+                }
+            });
+
+            return {
+                totalTrades: trades.length,
+                volume: trades.reduce((sum, trade) => sum + trade.size * trade.price, 0),
+                averageLeverage: trades.reduce((sum, trade) => sum + trade.leverage, 0) / trades.length,
+                byMarketType: this._groupTradesByMarketType(trades),
+                profitLoss: await this._calculateProfitLoss(trades)
+            };
+        } catch (error) {
+            logger.error(`Failed to calculate trade statistics: ${error.message}`);
+            throw new TradeError(error.message, 'STATISTICS_ERROR');
+        }
+    }
+
+    _calculateStartTime(timeframe) {
+        const now = new Date();
+        switch (timeframe) {
+            case '24h':
+                return new Date(now.setHours(now.getHours() - 24));
+            case '7d':
+                return new Date(now.setDate(now.getDate() - 7));
+            case '30d':
+                return new Date(now.setDate(now.getDate() - 30));
+            default:
+                return new Date(now.setHours(now.getHours() - 24));
+        }
+    }
+
+    _groupTradesByMarketType(trades) {
+        return trades.reduce((acc, trade) => {
+            const marketType = this._getMarketType(trade.symbol);
+            if (!acc[marketType]) {
+                acc[marketType] = {
+                    count: 0,
+                    volume: 0
+                };
+            }
+            acc[marketType].count++;
+            acc[marketType].volume += trade.size * trade.price;
+            return acc;
+        }, {});
+    }
+
+    async _calculateProfitLoss(trades) {
+        const closedPositions = await prisma.positionClose.findMany({
+            where: {
+                positionId: {
+                    in: trades.map(t => t.orderId)
+                }
+            }
+        });
+
+        const totalProfit = closedPositions.reduce((sum, close) => sum + close.pnl, 0);
+        const totalLoss = closedPositions.filter(p => p.pnl < 0).reduce((sum, p) => sum - p.pnl, 0);
+        const winRate = closedPositions.filter(p => p.pnl > 0).length / closedPositions.length;
+
+        return {
+            totalProfit,
+            totalLoss,
+            winRate
+        };
+    }
+
+    async emergencyShutdown(symbol) {
+        try {
+            // Cancel all pending orders first
+            await btccClient.cancelAllOrders(symbol);
+            
+            // Then close all open positions
+            const positions = await btccClient.getPositions(symbol);
+            for (const position of positions) {
+                await btccClient.emergencyClosePosition(position.orderId, {
+                    forceMarket: true
+                });
+            }
+
+            // Log the emergency action
+            await prisma.systemLog.create({
+                data: {
+                    type: 'EMERGENCY_SHUTDOWN',
+                    symbol,
+                    timestamp: new Date(),
+                    details: `Emergency shutdown executed for ${symbol}`
+                }
+            });
+        } catch (error) {
+            logger.error(`Emergency shutdown failed: ${error.message}`);
             throw error;
         }
     }
 
-    // Log trade for AI training & backtesting
-    static async logTrade({ symbol, strategy, direction, entryPrice, stopLoss, takeProfit, positionSize, leverage }) {
-        await prisma.tradeHistory.create({
-            data: {
-                symbol,
-                strategy,
-                direction,
-                entryPrice,
-                stopLoss,
-                takeProfit,
-                positionSize,
-                leverage,
-                tradeTime: new Date(),
-                outcome: null,
-                pnl: null,
-            }
-        });
-    }
-
-    // Risk-Based Position Sizing
-    static calculatePositionSize(accountBalance, riskPercentage, stopLossDistance) {
-        const riskAmount = (accountBalance * (riskPercentage / 100));
-        return Math.floor(riskAmount / stopLossDistance);
-    }
-
-    static validatePreTradeConditions(signal) {
-        // Validate required signal parameters
-        if (!signal || !signal.symbol || !signal.direction || !signal.strategy) {
-            logger.error('Missing required signal parameters');
-            return false;
-        }
-
-        // Validate signal direction
-        if (!['buy', 'sell'].includes(signal.direction.toLowerCase())) {
-            logger.error(`Invalid signal direction: ${signal.direction}`);
-            return false;
-        }
-
-        // Validate leverage range
-        if (signal.leverage < 1 || signal.leverage > 500) {
-            logger.error(`Invalid leverage value: ${signal.leverage}`);
-            return false;
-        }
-
-        // Strategy-specific validations
-        if (signal.strategy === "Brinks Box") {
-            if (!signal.brinks_high || !signal.brinks_low) {
-                logger.error('Missing Brinks Box levels');
-                return false;
-            }
-            if (signal.brinks_high <= signal.brinks_low) {
-                logger.error('Invalid Brinks Box levels configuration');
-                return false;
-            }
-        }
-
-        // Validate ATR value if present
-        if (signal.atr && signal.atr <= 0) {
-            logger.error(`Invalid ATR value: ${signal.atr}`);
-            return false;
-        }
-
-        return true;
-    }
-
-    static async isDuplicateTrade(signal) {
-        // Check for duplicate trades within the last hour
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    async validateOrderExecution(orderId, symbol) {
+        const btccClient = new BTCCClient();
+        const order = await btccClient.getOrder(orderId, symbol);
         
-        const recentTrade = await prisma.tradeHistory.findFirst({
-            where: {
-                symbol: signal.symbol,
-                strategy: signal.strategy,
-                direction: signal.direction,
-                tradeTime: {
-                    gte: oneHourAgo
-                }
-            }
-        });
-
-        return !!recentTrade;
-    }
-
-    static isValidBrinksTime(brinksTime) {
-        const currentTime = new Date();
-        const currentHour = currentTime.getUTCHours();
-        const currentMinute = currentTime.getUTCMinutes();
-        const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
-
-        // Check if current time is within formation period
-        if (currentTimeStr >= brinksTime.formationStart && currentTimeStr <= brinksTime.formationEnd) {
-            logger.info('Currently in Brinks Box formation period - no trading allowed');
-            return false;
+        if (order.status === 'FILLED') {
+            return {
+                success: true,
+                executionPrice: order.avgPrice,
+                filledQuantity: order.executedQty
+            };
         }
-
-        // Check if current time is within validity period
-        if (currentTimeStr > brinksTime.validityEnd) {
-            logger.info('Brinks Box validity period expired');
-            return false;
-        }
-
-        return true;
+        
+        return {
+            success: false,
+            status: order.status
+        };
     }
 }
 

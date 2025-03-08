@@ -8,10 +8,24 @@ const PerformanceTracker = require("./PerformanceTracker");
 const SystemHealthCheck = require("../health/systemCheck");
 const MarketDataService = require("./MarketDataService");
 const logger = require("../utils/logger");
+const MarketInternalsService = require('./MarketInternalsService');
 
 class AlertService {
-    static async handleAlert(payload) {
+    async processAlert(payload) {
         try {
+            const riskManager = new RiskManager();
+            
+            // Check if trading should be paused
+            const pauseCheck = await riskManager.shouldPauseTrading(payload.symbol);
+            if (pauseCheck) {
+                logger.warn(`Alert ignored - trading is paused for ${payload.symbol}. Reason: ${pauseCheck.reason}`);
+                return {
+                    success: false,
+                    message: `Trading is currently paused: ${pauseCheck.reason}`,
+                    conditions: pauseCheck.conditions
+                };
+            }
+
             // System health check first
             const healthStatus = await SystemHealthCheck.performHealthCheck();
             if (!this.isSystemHealthy(healthStatus)) {
@@ -68,8 +82,11 @@ class AlertService {
                     throw new Error("Risk parameters exceeded");
                 }
 
-                // Execute trade
-                const trade = await TradeService.executeTrade({
+                // Initialize TradeService instance
+                const tradeService = new TradeService();
+                
+                // Execute trade using instance method
+                const trade = await tradeService.executeTrade({
                     ...analysisResult,
                     ...payload
                 });
@@ -198,6 +215,51 @@ class AlertService {
             return 0.75; // Medium volatility - reduce size by 25%
         }
         return 1; // Normal volatility - no adjustment
+    }
+
+    static async validateTradeSignal(payload) {
+        try {
+            // Get market internals analysis
+            const marketInternals = await MarketInternalsService.getMarketInternalsAnalysis();
+            
+            // Validate market conditions based on direction
+            const direction = payload.signal === 'buy' ? 'buy' : 'sell';
+            const internalsValid = await MarketInternalsService.validateMarketInternals(direction);
+
+            if (!internalsValid) {
+                throw new Error('Market internals validation failed');
+            }
+
+            // Adjust position size based on market internals score
+            const score = await MarketInternalsService.calculateMarketInternalsScore();
+            const positionSizeMultiplier = this._calculatePositionMultiplier(score);
+
+            return {
+                isValid: true,
+                positionSizeMultiplier,
+                marketContext: {
+                    internalsScore: score,
+                    sentiment: marketInternals.marketSentiment,
+                    indicators: marketInternals.indicators
+                }
+            };
+
+        } catch (error) {
+            logger.error(`Trade signal validation failed: ${error.message}`);
+            return {
+                isValid: false,
+                error: error.message
+            };
+        }
+    }
+
+    static _calculatePositionMultiplier(score) {
+        // Scale position size based on market internals score
+        if (score >= 80) return 1.2;
+        if (score >= 60) return 1.0;
+        if (score >= 40) return 0.8;
+        if (score >= 20) return 0.6;
+        return 0.4;
     }
 }
 

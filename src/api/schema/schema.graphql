@@ -1,6 +1,54 @@
+type PositionModification {
+    id: ID!
+    timestamp: DateTime!
+    stopLoss: Float
+    takeProfit: Float
+    leverage: Float
+    size: Float
+}
+
+type PositionClose {
+    id: ID!
+    timestamp: DateTime!
+    price: Float!
+    pnl: Float!
+    reason: String
+}
+
+type PositionMetrics {
+    holdingTimeHours: Float!
+    roi: Float!
+    modifications: Int!
+    finalLeverage: Float!
+}
+
+type Position {
+    id: ID!
+    symbol: String!
+    direction: String!
+    size: Float!
+    leverage: Float!
+    entryPrice: Float!
+    timestamp: DateTime!
+    metrics: PositionMetrics!
+    modifications: [PositionModification!]!
+    close: PositionClose
+}
+
+# Consolidate all queries into one Query type
 type Query {
+    # Position queries
+    positionHistory(filters: PositionHistoryFilters): [Position!]!
+    
+    # Existing trade queries
     getTradeHistory: [Trade]
     getSignalAnalysis(payload: SignalPayloadInput!): SignalAnalysis
+    getActiveTrades: [Trade!]!
+    getTradingStats(
+        timeframe: TimeFrame! = DAY
+        from: DateTime
+        to: DateTime
+    ): TradingStats!
 }
 
 type Mutation {
@@ -47,4 +95,12 @@ input TradeInput {
 type TradeResult {
     success: Boolean!
     message: String!
+}
+
+input PositionHistoryFilters {
+    from: DateTime
+    to: DateTime
+    symbol: String
+    strategy: String
+    status: String
 }

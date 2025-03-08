@@ -15,6 +15,7 @@
   "private": true,
   "license": "MIT",
   "dependencies": {
+    "@graphql-tools/merge": "^9.0.22",
     "@prisma/client": "^6.3.0",
     "@sentry/node": "^9.4.0",
     "bottleneck": "^2.19.5",

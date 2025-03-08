@@ -1,4 +1,6 @@
 const strategyConfig = require('../config/strategyConfig');
+const {sendSlackAlert} = require("../utils/slackNotifier");
+const {btccClient} = require("../lib/btcc");
 
 class RiskManager {
     static getStrategySettings(strategyName) {
@@ -289,28 +291,6 @@ class RiskManager {
         return [];
     }
 
-    static calculateATR(candles, period = 14) {
-        if (candles.length < period) {
-            throw new Error('Not enough candles for ATR calculation');
-        }
-
-        let trueRanges = [];
-        for (let i = 1; i < candles.length; i++) {
-            const high = candles[i].high;
-            const low = candles[i].low;
-            const prevClose = candles[i - 1].close;
-
-            const tr1 = high - low;
-            const tr2 = Math.abs(high - prevClose);
-            const tr3 = Math.abs(low - prevClose);
-
-            trueRanges.push(Math.max(tr1, tr2, tr3));
-        }
-
-        // Calculate ATR as simple moving average of true ranges
-        return trueRanges.slice(-period).reduce((sum, tr) => sum + tr, 0) / period;
-    }
-
     static async validateAllRiskParameters(payload) {
         const validations = await Promise.all([
             this.checkDailyLossLimit(),
@@ -527,7 +507,7 @@ class RiskManager {
                 }
 
                 // Check for adverse market conditions
-                const marketConditions = await this.validateMarketConditions({
+                const marketConditions = this.validateMarketConditions({
                     symbol,
                     direction: position.direction,
                     technicals: position.technicals
@@ -567,6 +547,218 @@ class RiskManager {
             conditions,
             message: `Exit validation: ${JSON.stringify(conditions)}`
         };
+    }
+
+    async checkRiskThresholds(symbol) {
+        try {
+            const checks = await Promise.all([
+                this._isVolatilityTooHigh(symbol),
+                this._isDrawdownExcessive(symbol),
+                this._isSystemUnstable()
+            ]);
+
+            if (checks.some(Boolean)) {
+                const tradeService = new TradeService();
+                await tradeService.emergencyShutdown(symbol);
+                
+                await prisma.systemLog.create({
+                    data: {
+                        type: 'RISK_THRESHOLD_BREACH',
+                        symbol,
+                        timestamp: new Date(),
+                        details: JSON.stringify({
+                            highVolatility: checks[0],
+                            excessiveDrawdown: checks[1],
+                            systemUnstable: checks[2]
+                        })
+                    }
+                });
+
+                // Notify administrators
+                await sendSlackAlert({
+                    type: 'EMERGENCY_SHUTDOWN',
+                    symbol,
+                    reason: checks[0] ? 'High Volatility' :
+                            checks[1] ? 'Excessive Drawdown' :
+                            'System Instability',
+                    timestamp: new Date()
+                });
+
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            logger.error(`Error checking risk thresholds: ${error.message}`);
+            return false; // Assume risk thresholds are breached on error
+        }
+    }
+
+    async _isVolatilityTooHigh(symbol) {
+        try {
+            const candles = await btccClient.getCandles(symbol, '1h', 24);
+            const atr = this.calculateATR(candles);
+            const price = candles[candles.length - 1].close;
+            
+            const volatility = (atr / price) * 100;
+            const maxVolatility = process.env.MAX_VOLATILITY_PERCENTAGE || 5;
+
+            if (volatility > maxVolatility) {
+                logger.warn(`High volatility detected for ${symbol}: ${volatility.toFixed(2)}%`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            logger.error(`Error checking volatility: ${error.message}`);
+            return true; // Fail safe: assume high volatility on error
+        }
+    }
+
+    async _isDrawdownExcessive(symbol) {
+        try {
+            const positions = await btccClient.getActivePositions(symbol);
+            const accountBalance = await btccClient.getAccountBalance();
+            
+            // Calculate total unrealized PnL
+            const totalDrawdown = positions.reduce((sum, pos) => 
+                sum + (pos.unrealizedPnL || 0), 0);
+            
+            const drawdownPercentage = (totalDrawdown / accountBalance) * 100;
+            const maxDrawdown = process.env.MAX_ACCOUNT_DRAWDOWN || 10;
+
+            if (Math.abs(drawdownPercentage) > maxDrawdown) {
+                logger.warn(`Excessive drawdown detected: ${drawdownPercentage.toFixed(2)}%`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            logger.error(`Error checking drawdown: ${error.message}`);
+            return true; // Fail safe: assume excessive drawdown on error
+        }
+    }
+
+    async _isSystemUnstable() {
+        try {
+            // Check API response times
+            const startTime = Date.now();
+            await btccClient.getMarketPrice('BTC-USD');
+            const latency = Date.now() - startTime;
+            
+            // Check error rate from recent operations
+            const recentErrors = await prisma.systemLog.count({
+                where: {
+                    type: 'ERROR',
+                    timestamp: {
+                        gte: new Date(Date.now() - 5 * 60 * 1000) // last 5 minutes
+                    }
+                }
+            });
+
+            // Check order execution success rate
+            const recentOrders = await prisma.orderLog.findMany({
+                where: {
+                    timestamp: {
+                        gte: new Date(Date.now() - 15 * 60 * 1000) // last 15 minutes
+                    }
+                }
+            });
+
+            const executionSuccessRate = recentOrders.length > 0 
+                ? recentOrders.filter(o => o.status === 'FILLED').length / recentOrders.length 
+                : 1;
+
+            const conditions = {
+                highLatency: latency > (process.env.MAX_API_LATENCY || 1000),
+                errorThreshold: recentErrors > (process.env.MAX_ERROR_COUNT || 5),
+                memoryUsage: process.memoryUsage().heapUsed > 
+                    (process.env.MAX_MEMORY_USAGE || 512 * 1024 * 1024), // 512MB default
+                poorExecutionRate: executionSuccessRate < (process.env.MIN_EXECUTION_RATE || 0.8)
+            };
+
+            if (Object.values(conditions).some(Boolean)) {
+                logger.warn(`System instability detected: ${JSON.stringify(conditions)}`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            logger.error(`Error checking system stability: ${error.message}`);
+            return true; // Fail safe: assume system is unstable on error
+        }
+    }
+
+    // Helper method to calculate ATR (Average True Range)
+    static calculateATR(candles, period = 14) {
+        if (candles.length < period) {
+            throw new Error('Insufficient data for ATR calculation');
+        }
+
+        const trueRanges = candles.map((candle, i) => {
+            if (i === 0) return candle.high - candle.low;
+
+            const previousClose = candles[i - 1].close;
+            const tr = Math.max(
+                candle.high - candle.low,
+                Math.abs(candle.high - previousClose),
+                Math.abs(candle.low - previousClose)
+            );
+            return tr;
+        });
+
+        // Calculate simple moving average of true ranges
+        return trueRanges
+            .slice(-period)
+            .reduce((sum, tr) => sum + tr, 0) / period;
+    }
+
+    // Method to check if trading should be paused
+    async shouldPauseTrading(symbol) {
+        try {
+            // Check market conditions
+            const marketData = await MarketDataService.getMarketData(symbol);
+            
+            const conditions = {
+                isVolatile: await this._isVolatilityTooHigh(symbol),
+                hasExcessiveDrawdown: await this._isDrawdownExcessive(symbol),
+                isSystemUnstable: await this._isSystemUnstable(),
+                isMarketClosed: !marketData.isMarketOpen,
+                hasRecentNews: await this._hasSignificantNewsEvent(symbol)
+            };
+
+            const shouldPause = Object.values(conditions).some(Boolean);
+
+            if (shouldPause) {
+                logger.warn(`Trading paused for ${symbol}. Conditions: ${JSON.stringify(conditions)}`);
+                
+                await prisma.systemLog.create({
+                    data: {
+                        type: 'TRADING_PAUSE',
+                        symbol,
+                        timestamp: new Date(),
+                        details: JSON.stringify(conditions)
+                    }
+                });
+            }
+
+            return shouldPause;
+        } catch (error) {
+            logger.error(`Error checking trading pause conditions: ${error.message}`);
+            return true; // Fail-safe: pause trading on error
+        }
+    }
+
+    async _hasSignificantNewsEvent(symbol) {
+        try {
+            const recentNews = await MarketDataService.getRecentNews(symbol);
+            const significantNews = recentNews.filter(news => 
+                news.impact === 'HIGH' && 
+                (Date.now() - news.timestamp) < 30 * 60 * 1000 // within last 30 minutes
+            );
+
+            return significantNews.length > 0;
+        } catch (error) {
+            logger.error(`Error checking news events: ${error.message}`);
+            return true; // Fail-safe: assume significant news on error
+        }
     }
 }
 

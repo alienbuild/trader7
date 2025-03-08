@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  trader7-api:
+    build: .
+    ports:
+      - "4000:4000"
+    depends_on:
+      - trader7-db
+    environment:
+      - DATABASE_URL=postgresql://trader7user:trader7pass@trader7-db:5432/trader7
+      - NODE_ENV=production
+    command: sh -c "./wait-for-db.sh && npm start"
+
+  trader7-frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://trader7-api:4000
+    depends_on:
+      - trader7-api
+
+  trader7-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=trader7
+      - POSTGRES_USER=trader7user
+      - POSTGRES_PASSWORD=trader7pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - trader7-network
+
+volumes:
+  postgres_data:
+
+networks:
+  trader7-network:
+    driver: bridge

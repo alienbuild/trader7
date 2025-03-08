@@ -114,6 +114,8 @@ model MarketData {
   volume    Float
   timestamp DateTime
   createdAt DateTime @default(now())
+
+  @@index([timestamp])
 }
 
 model TradingSession {
@@ -122,4 +124,135 @@ model TradingSession {
   startTime String
   endTime   String
   isActive  Boolean @default(true)
+}
+
+model NewsEvent {
+  id         String   @id @default(uuid())
+  type       String // NEWS or ECONOMIC_EVENT
+  title      String
+  source     String
+  symbol     String?
+  impact     Float // 0 to 1
+  timestamp  DateTime
+  content    String
+  sentiment  Float // -1 to 1
+  importance Float // 0 to 1
+  tags       String[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model TradingBlock {
+  id        String   @id @default(uuid())
+  startTime DateTime
+  endTime   DateTime
+  reason    String
+  eventId   String?
+  symbol    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+enum EconomicEventType {
+  FOMC
+  NFP
+  CPI
+  GDP
+  RETAIL_SALES
+  PMI
+  EARNINGS
+}
+
+model EconomicEvent {
+  id         String            @id @default(uuid())
+  type       EconomicEventType
+  symbol     String? // Optional - some events affect all symbols
+  title      String
+  timestamp  DateTime
+  importance Float // 0 to 1
+  impact     Float? // Actual impact after event (-1 to 1)
+  forecast   Float?
+  previous   Float?
+  actual     Float?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
+
+enum SessionType {
+  PRE_MARKET
+  REGULAR
+  AFTER_HOURS
+}
+
+model NasdaqSession {
+  id            String      @id @default(uuid())
+  date          DateTime
+  sessionType   SessionType
+  openTime      DateTime
+  closeTime     DateTime
+  isHoliday     Boolean     @default(false)
+  holidayName   String?
+  isEarlyClose  Boolean     @default(false)
+  tradingVolume Float?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([date])
+}
+
+enum MarketType {
+  NASDAQ
+  CRYPTO
+}
+
+enum IndicatorName {
+  TICK
+  ADD
+  TRIN
+  VIX
+}
+
+model MarketInternalThreshold {
+  id             String        @id @default(uuid())
+  marketType     MarketType
+  indicatorName  IndicatorName
+  longThreshold  Float
+  shortThreshold Float
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([marketType, indicatorName])
+}
+
+model NasdaqMarketInternals {
+  id        String   @id @default(uuid())
+  timestamp DateTime @default(now())
+  tick      Float
+  add       Float
+  trin      Float
+  vix       Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([timestamp])
+}
+
+model PositionModification {
+  id         Int      @id @default(autoincrement())
+  positionId Int
+  position   Position @relation(fields: [positionId], references: [id])
+  stopLoss   Float?
+  takeProfit Float?
+  size       Float?
+  leverage   Float?
+  timestamp  DateTime @default(now())
+
+  @@map("position_modifications")
+}
+
+model Position {
+  id            Int                    @id @default(autoincrement())
+  modifications PositionModification[]
+  // ... other Position fields
 }

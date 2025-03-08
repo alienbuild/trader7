@@ -1,0 +1,98 @@
+type Trade {
+    id: ID!
+    symbol: String!
+    strategy: String!
+    direction: String! # LONG or SHORT
+    entryPrice: Float!
+    exitPrice: Float
+    stopLoss: Float!
+    takeProfit: Float!
+    leverage: Int!
+    size: Float!
+    status: TradeStatus!
+    pnl: Float
+    pnlPercentage: Float
+    entryTime: DateTime!
+    exitTime: DateTime
+    notes: String
+}
+
+type TradeHistory {
+    id: ID!
+    date: DateTime!
+    trades: [Trade!]!
+    totalTrades: Int!
+    winningTrades: Int!
+    losingTrades: Int!
+    winRate: Float!
+    netPnl: Float!
+    netPnlPercentage: Float!
+    dayStatus: DayStatus!
+}
+
+type AccountBalance {
+    total: Float!
+    available: Float!
+    margin: Float!
+    unrealizedPnl: Float!
+    realizedPnl: Float!
+    dailyPnl: Float!
+    weeklyPnl: Float!
+    monthlyPnl: Float!
+}
+
+type SystemLog {
+    id: ID!
+    timestamp: DateTime!
+    level: LogLevel!
+    message: String!
+    category: LogCategory!
+    metadata: JSON
+}
+
+type TradingStats {
+    winRate: Float!
+    profitFactor: Float!
+    averageWin: Float!
+    averageLoss: Float!
+    largestWin: Float!
+    largestLoss: Float!
+    averageHoldingTime: Float!
+    totalTrades: Int!
+    consecutiveWins: Int!
+    consecutiveLosses: Int!
+    currentDrawdown: Float!
+    maxDrawdown: Float!
+}
+
+enum TradeStatus {
+    OPEN
+    CLOSED
+    PENDING
+    CANCELLED
+}
+
+enum DayStatus {
+    WIN
+    LOSS
+    NEUTRAL
+    NO_TRADE
+}
+
+enum LogLevel {
+    INFO
+    WARNING
+    ERROR
+    CRITICAL
+}
+
+enum LogCategory {
+    TRADE
+    SYSTEM
+    RISK
+    API
+    DATABASE
+}
+
+scalar DateTime
+scalar JSON

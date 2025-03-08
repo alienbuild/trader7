@@ -1,0 +1,41 @@
+type Query {
+    # Account queries
+    getAccountBalance: AccountBalance!
+    
+    # Trade queries
+    getActiveTrades: [Trade!]!
+    getTradeHistory(
+        from: DateTime
+        to: DateTime
+        symbol: String
+        strategy: String
+    ): [TradeHistory!]!
+    getTradingStats(
+        timeframe: TimeFrame! = DAY
+        from: DateTime
+        to: DateTime
+    ): TradingStats!
+    
+    # System queries
+    getSystemLogs(
+        level: LogLevel
+        category: LogCategory
+        from: DateTime
+        to: DateTime
+        limit: Int = 100
+    ): [SystemLog!]!
+    
+    # Performance queries
+    getDailyPerformance(
+        from: DateTime!
+        to: DateTime!
+    ): [TradeHistory!]!
+}
+
+enum TimeFrame {
+    DAY
+    WEEK
+    MONTH
+    YEAR
+    ALL
+}

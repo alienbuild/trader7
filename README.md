@@ -236,7 +236,7 @@ docker run -d \
 - System Uptime
 - Error Rate
 
-## 🔍 Troubleshooting
+## �� Troubleshooting
 
 ### Common Issues
 1. **TradingView Webhook Issues**
@@ -501,3 +501,255 @@ For support and inquiries:
 ---
 
 Last updated: 2024
+
+## �� Docker Setup
+
+### PostgreSQL Database
+```bash
+# Create a Docker network for the application
+docker network create trader7-network
+
+# Start PostgreSQL container
+docker run -d \
+  --name trader7-db \
+  --network trader7-network \
+  -e POSTGRES_DB=trader7 \
+  -e POSTGRES_USER=trader7user \
+  -e POSTGRES_PASSWORD=yourpassword \
+  -p 5432:5432 \
+  postgres:13-alpine
+
+# Verify database is running
+docker logs trader7-db
+```
+
+### Environment Configuration
+Update your `.env` file with the following database connection:
+```bash
+DATABASE_URL="postgresql://trader7user:yourpassword@trader7-db:5432/trader7"
+```
+
+For local development without Docker, use:
+```bash
+DATABASE_URL="postgresql://trader7user:yourpassword@localhost:5432/trader7"
+```
+
+## 📊 TradingView Setup
+
+### Adding the Indicator
+
+1. **Import the Indicator**
+   ```
+   1. Open TradingView Chart
+   2. Click "Pine Editor" at the bottom of the screen
+   3. Click "Open" (folder icon)
+   4. Copy and paste the content from _contrib/trader7_indicator.pine
+   5. Click "Add to Chart"
+   ```
+
+2. **Configure Indicator Settings**
+   ```
+   1. Click the indicator settings (gear icon)
+   2. Set your webhook URL: https://your-api-endpoint.com/webhook
+   3. Adjust other parameters as needed:
+      - Number of Historical Bars (default: 50)
+      - ATR Period (default: 14)
+      - Volume MA Period (default: 20)
+   ```
+
+### Setting Up Alerts
+
+1. **Create New Alert**
+   ```
+   1. Right-click on the chart
+   2. Select "Create Alert"
+   3. Choose "trader7_indicator" as the source
+   ```
+
+2. **Configure Alert Settings**
+   ```
+   1. Set Alert name: "Trader7 Signal"
+   2. Condition: "trader7_indicator"
+   3. Options:
+      - Once Per Bar Close
+      - Show Popup: Optional
+      - Send Email: Optional
+      - Play Sound: Optional
+   ```
+
+3. **Configure Webhook**
+   ```
+   1. Enable "Webhook URL"
+   2. Use your deployment URL + /webhook
+      Example: https://your-domain.com/api/webhook
+   3. Set the following JSON payload:
+   ```
+   ```json
+   {
+     "symbol": "{{ticker}}",
+     "timestamp": "{{time}}",
+     "price": {{close}},
+     "vector": {
+       "type": "{{strategy.order.alert_message}}",
+       "direction": "{{strategy.order.action}}",
+       "recovered": false
+     },
+     "technicals": {
+       "ema_50": {{plot("EMA50")}},
+       "ema_200": {{plot("EMA200")}},
+       "ema_800": {{plot("EMA800")}},
+       "rsi": {{plot("RSI")}},
+       "adr": {{plot("ADR")}}
+     },
+     "session": {
+       "current": "{{session}}",
+       "isActive": {{session.ismarket}},
+       "range": {
+         "high": {{session.high}},
+         "low": {{session.low}}
+       }
+     }
+   }
+   ```
+
+### Alert Conditions
+
+1. **Long Entry Alert**
+   - First green vector candle above 50 EMA
+   - Volume spike confirmation
+   - RSI not overbought (<70)
+   - EMA fan-out confirmation
+
+2. **Short Entry Alert**
+   - First red vector candle below 50 EMA
+   - Volume spike confirmation
+   - RSI not oversold (>30)
+   - EMA fan-out confirmation
+
+3. **Exit Alerts**
+   - Take Profit hit
+   - Stop Loss hit
+   - Pattern invalidation
+
+### Testing Alerts
+
+1. **Local Testing**
+   ```bash
+   # Start your local server
+   npm run dev
+
+   # Use curl to test webhook
+   curl -X POST http://localhost:4000/api/webhook \
+     -H "Content-Type: application/json" \
+     -d '{
+       "symbol": "BTCUSDT",
+       "timestamp": "2024-01-01T12:00:00Z",
+       "price": 42000,
+       "vector": {
+         "type": "W_FORMATION",
+         "direction": "LONG",
+         "recovered": false
+       },
+       "technicals": {
+         "ema_50": 41950,
+         "ema_200": 41800,
+         "ema_800": 41600,
+         "rsi": 55,
+         "adr": 1200
+       },
+       "session": {
+         "current": "LONDON",
+         "isActive": true,
+         "range": {
+           "high": 42100,
+           "low": 41900
+         }
+       }
+     }'
+   ```
+
+## 📈 Supported Markets
+
+### Crypto Markets
+- **BTC/USDT**
+  - Exchange: BTCC
+  - Leverage: Up to 100x
+  - Trading Hours: 24/7
+  - Min Position Size: 0.001 BTC
+
+- **ETH/USDT**
+  - Exchange: BTCC
+  - Leverage: Up to 50x
+  - Trading Hours: 24/7
+  - Min Position Size: 0.01 ETH
+
+### Index Markets
+- **NASDAQ (US100)**
+  - Exchange: BTCC-I
+  - Symbol: NAS100USDT
+  - Leverage: Up to 20x
+  - Trading Hours: 
+    - Regular: Mon-Fri 09:30-16:00 EST
+    - Pre-market: 04:00-09:30 EST
+    - After-hours: 16:00-20:00 EST
+  - Min Position Size: 0.1 lot
+
+## ⚙️ Market-Specific Configurations
+
+### Trading Sessions
+```json
+{
+  "crypto": {
+    "trading_hours": "24/7",
+    "maintenance_windows": ["Saturday 00:00-02:00 UTC"]
+  },
+  "nasdaq": {
+    "pre_market": {
+      "start": "04:00",
+      "end": "09:30",
+      "timezone": "America/New_York"
+    },
+    "regular": {
+      "start": "09:30",
+      "end": "16:00",
+      "timezone": "America/New_York"
+    },
+    "after_hours": {
+      "start": "16:00",
+      "end": "20:00",
+      "timezone": "America/New_York"
+    }
+  }
+}
+```
+
+### Risk Parameters
+```json
+{
+  "btc": {
+    "max_position_size": "1000 USDT",
+    "max_leverage": 100,
+    "default_leverage": 10
+  },
+  "eth": {
+    "max_position_size": "500 USDT",
+    "max_leverage": 50,
+    "default_leverage": 5
+  },
+  "nasdaq": {
+    "max_position_size": "200 USDT",
+    "max_leverage": 20,
+    "default_leverage": 5,
+    "session_rules": {
+      "pre_market": {
+        "position_size_multiplier": 0.5,
+        "leverage_cap": 10
+      },
+      "after_hours": {
+        "position_size_multiplier": 0.5,
+        "leverage_cap": 10
+      }
+    }
+  }
+}
+```
